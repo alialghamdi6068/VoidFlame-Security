@@ -1,0 +1,5 @@
+settings:
+  enabled: true
+  module: security
+  max-actions-per-second: 12
+  violation-window-seconds: 10
