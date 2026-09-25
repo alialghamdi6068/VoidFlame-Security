@@ -1,0 +1,9 @@
+name: VoidFlame-Security
+version: 1.0.0
+main: net.voidflame.security.VoidFlameSecurityPlugin
+description: Security and abuse protection module for VoidFlame MC.
+author: VoidFlame
+website: https://github.com/alialghamdi6068/VoidFlame-Security
+api-version: '26.2'
+load: POSTWORLD
+depend: [VoidFlame-Core]
