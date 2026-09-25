@@ -3,6 +3,8 @@ package net.voidflame.security;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerCommandPreprocessEvent;
+import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -53,6 +55,22 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
             return (CompletableFuture<Void>) put.invoke(storage, "security", "violation:" + player, reason + ":" + System.currentTimeMillis());
         } catch (ReflectiveOperationException ex) {
             return CompletableFuture.failedFuture(ex);
+        }
+    }
+
+    @EventHandler
+    public void onCommand(PlayerCommandPreprocessEvent event) {
+        if (!allowAction(event.getPlayer().getUniqueId())) {
+            event.setCancelled(true);
+            recordViolation(event.getPlayer().getUniqueId(), "command-rate-limit");
+        }
+    }
+
+    @EventHandler
+    public void onChat(AsyncPlayerChatEvent event) {
+        if (!allowAction(event.getPlayer().getUniqueId())) {
+            event.setCancelled(true);
+            recordViolation(event.getPlayer().getUniqueId(), "chat-rate-limit");
         }
     }
 
