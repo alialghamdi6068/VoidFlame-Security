@@ -12,11 +12,13 @@ import java.lang.reflect.Method;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.ArrayDeque;
+import java.util.Deque;
 
 public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listener {
     private Object storage;
     private Method put;
-    private final ConcurrentHashMap<UUID, Long> lastAction = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, Deque<Long>> actionWindows = new ConcurrentHashMap<>();
 
     @Override
     public void onEnable() {
@@ -45,14 +47,20 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
 
     public boolean allowAction(UUID player) {
         long now = System.currentTimeMillis();
-        long minimum = 1000L / Math.max(1, getConfig().getInt("settings.max-actions-per-second", 12));
-        Long previous = lastAction.put(player, now);
-        return previous == null || now - previous >= minimum;
+        int max = Math.max(1, getConfig().getInt("settings.max-actions-per-second", 12));
+        Deque<Long> window = actionWindows.computeIfAbsent(player, ignored -> new ArrayDeque<>());
+        synchronized (window) {
+            while (!window.isEmpty() && now - window.peekFirst() >= 1000L) window.removeFirst();
+            if (window.size() >= max) return false;
+            window.addLast(now);
+            return true;
+        }
     }
 
     public CompletableFuture<Void> recordViolation(UUID player, String reason) {
         try {
-            return (CompletableFuture<Void>) put.invoke(storage, "security", "violation:" + player, reason + ":" + System.currentTimeMillis());
+            String key = "violation:" + player + ":" + System.currentTimeMillis();
+            return (CompletableFuture<Void>) put.invoke(storage, "security", key, reason);
         } catch (ReflectiveOperationException ex) {
             return CompletableFuture.failedFuture(ex);
         }
@@ -76,6 +84,6 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
 
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
-        lastAction.remove(event.getPlayer().getUniqueId());
+        actionWindows.remove(event.getPlayer().getUniqueId());
     }
 }
