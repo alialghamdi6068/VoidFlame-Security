@@ -1,9 +1,23 @@
 name: VoidFlame-Security
 version: 1.0.0
 main: net.voidflame.security.VoidFlameSecurityPlugin
-description: Security and abuse protection module for VoidFlame MC.
+description: Advanced AntiBot, captcha, rate limiting and abuse protection for VoidFlame MC.
 author: VoidFlame
 website: https://github.com/alialghamdi6068/VoidFlame-Security
 api-version: '26.2'
 load: POSTWORLD
 depend: [VoidFlame-Core]
+
+commands:
+  antibot:
+    description: Manage VoidFlame AntiBot protection.
+    usage: /antibot <on|off|status|whitelist>
+    permission: voidflame.security.admin
+
+permissions:
+  voidflame.security.admin:
+    description: Manage AntiBot protection.
+    default: op
+  voidflame.security.bypass:
+    description: Bypass AntiBot verification.
+    default: op
