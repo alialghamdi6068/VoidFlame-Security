@@ -231,7 +231,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
                     else { storage.put("security", "verified:" + id, "0"); }
                 } catch (NumberFormatException ignored) {}
             });
-        } catch (ReflectiveOperationException ignored) {}
+        } catch (RuntimeException ignored) {}
     }
 
     private void finishCheck(Player player, boolean success) {
