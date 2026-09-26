@@ -46,7 +46,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
-        loadWhitelist();
+        loadWhitelistAsync();
         getServer().getPluginManager().registerEvents(this, this);
         Objects.requireNonNull(getCommand("antibot")).setExecutor((sender, command, label, args) -> command(sender, args));
         Objects.requireNonNull(getCommand("antibot")).setTabCompleter((sender, command, alias, args) -> tabComplete(args));
@@ -68,17 +68,22 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         joinTimes.put(id, now);
 
         if (!enabled || bypass(player)) return;
-        loadVerified(player);
-
-        long window = Math.max(1, getConfig().getLong("antibot.join-window-seconds", 10)) * 1000L;
-        int threshold = Math.max(1, getConfig().getInt("antibot.join-threshold", 6));
-        long joins = joinTimes.values().stream().filter(t -> now - t <= window).count();
-
-        if (joins >= threshold) {
-            activateChallenge(player);
-        } else if (getConfig().getBoolean("antibot.always-check-new-players", false)) {
-            activateChallenge(player);
-        }
+        storage.get("security", "verified:" + id).thenAccept(value -> {
+            boolean alreadyVerified = false;
+            if (value != null) {
+                try {
+                    alreadyVerified = Long.parseLong(value) > System.currentTimeMillis();
+                    if (alreadyVerified) verified.add(id);
+                } catch (NumberFormatException ignored) {}
+            }
+            if (alreadyVerified || !player.isOnline() || bypass(player)) return;
+            long window = Math.max(1, getConfig().getLong("antibot.join-window-seconds", 10)) * 1000L;
+            int threshold = Math.max(1, getConfig().getInt("antibot.join-threshold", 6));
+            long joins = joinTimes.values().stream().filter(t -> now - t <= window).count();
+            if (joins >= threshold || getConfig().getBoolean("antibot.always-check-new-players", false)) {
+                Bukkit.getScheduler().runTask(this, () -> activateChallenge(player));
+            }
+        }).exceptionally(error -> { getLogger().warning("Verification lookup failed: " + error.getMessage()); return null; });
     }
 
     private void activateChallenge(Player player) {
@@ -218,20 +223,13 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         return verified.contains(id);
     }
 
-    private void loadVerified(Player player) {
-        UUID id = player.getUniqueId();
-        if (verified.contains(id)) return;
-        try {
-            CompletableFuture<String> future = storage.get("security", "verified:" + id);
-            future.thenAccept(value -> {
-                if (value == null) return;
-                try {
-                    long expires = Long.parseLong(value);
-                    if (expires > System.currentTimeMillis()) verified.add(id);
-                    else { storage.put("security", "verified:" + id, "0"); }
-                } catch (NumberFormatException ignored) {}
-            });
-        } catch (RuntimeException ignored) {}
+    private void loadWhitelistAsync() {
+        storage.get("security", "whitelist").thenAccept(raw -> {
+            if (raw == null || raw.isBlank()) return;
+            for (String value : raw.split(",")) {
+                try { whitelist.add(UUID.fromString(value)); } catch (IllegalArgumentException ignored) {}
+            }
+        }).exceptionally(error -> { getLogger().warning("Could not load security whitelist: " + error.getMessage()); return null; });
     }
 
     private void finishCheck(Player player, boolean success) {
