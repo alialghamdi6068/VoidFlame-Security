@@ -239,7 +239,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
                 try {
                     long expires = Long.parseLong(value);
                     if (expires > System.currentTimeMillis()) verified.add(id);
-                    else put.invoke(storage, "security", "verified:" + id, "0");
+                    else { try { put.invoke(storage, "security", "verified:" + id, "0"); } catch (ReflectiveOperationException ignored) {} }
                 } catch (NumberFormatException ignored) {}
             });
         } catch (ReflectiveOperationException ignored) {}
