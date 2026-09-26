@@ -1,0 +1,9 @@
+[minecraft-proxy]
+enabled = true
+port = 25565
+filter = voidflame-minecraft
+logpath = /var/log/haproxy.log
+maxretry = 8
+findtime = 60
+bantime = 3600
+action = nftables[type=multiport, name=minecraft-proxy, port="25565", protocol=tcp]
