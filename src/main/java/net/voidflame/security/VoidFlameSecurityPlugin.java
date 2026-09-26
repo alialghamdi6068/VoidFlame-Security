@@ -269,7 +269,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     }
 
     private boolean command(org.bukkit.command.CommandSender sender, String[] args) {
-        if (!sender.hasPermission("voidflame.security.admin")) { sender.sendMessage("§cNo permission."); return true; }
+        if (!sender.hasPermission("voidflame.security.manage")) { sender.sendMessage("§cNo permission."); return true; }
         if (args.length == 0 || args[0].equalsIgnoreCase("status")) {
             sender.sendMessage("§8§m----------------");
             sender.sendMessage("§bVoidFlame AntiBot");
