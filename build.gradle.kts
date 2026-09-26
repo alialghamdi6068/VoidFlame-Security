@@ -11,7 +11,7 @@ repositories {
 }
 dependencies {
     compileOnly("io.papermc.paper:paper-api:26.2.build.+")
-    compileOnly("com.github.alialghamdi6068:VoidFlame-Core:main-SNAPSHOT")
+    compileOnly("com.github.alialghamdi6068:VoidFlame-Core:0bb24e3c")
 }
 java { toolchain.languageVersion.set(JavaLanguageVersion.of(25)); withSourcesJar() }
 tasks.withType<JavaCompile>().configureEach { options.encoding="UTF-8"; options.release.set(25) }
