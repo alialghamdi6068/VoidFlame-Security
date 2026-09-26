@@ -26,8 +26,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 
 public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listener {
-    private static final long VERIFIED_MS = 24L * 60L * 60L * 1000L;
-
     private StorageService storage;
     private final ConcurrentHashMap<UUID, Deque<Long>> actionWindows = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Long> joinTimes = new ConcurrentHashMap<>();
@@ -56,7 +54,8 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         getServer().getPluginManager().registerEvents(this, this);
         Objects.requireNonNull(getCommand("antibot")).setExecutor((sender, command, label, args) -> command(sender, args));
         Objects.requireNonNull(getCommand("antibot")).setTabCompleter((sender, command, alias, args) -> tabComplete(args));
-        getServer().getScheduler().runTaskTimer(this, this::decayProtection, 20L * 30L, 20L * 30L);
+        long decayTicks = Math.max(10L, getConfig().getLong("antibot.decay-seconds", 300L) * 20L);
+        getServer().getScheduler().runTaskTimer(this, this::decayProtection, decayTicks, decayTicks);
         getLogger().info("VoidFlame-Security enabled: AntiBot + rate protection.");
     }
 
@@ -94,8 +93,9 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
             long window = Math.max(1, getConfig().getLong("antibot.join-window-seconds", 10)) * 1000L;
             int threshold = Math.max(1, getConfig().getInt("antibot.join-threshold", 6));
             long joins = joinTimes.values().stream().filter(t -> now - t <= window).count();
-            protectionLevel = joins >= threshold * 3L ? 3 : joins >= threshold * 2L ? 2 : joins >= threshold ? 1 : 0;
-            if (joins >= threshold * 3L) {
+            int attackMultiplier = Math.max(1, getConfig().getInt("antibot.attack-mode-multiplier", 3));
+            protectionLevel = joins >= threshold * attackMultiplier ? 3 : joins >= threshold * 2L ? 2 : joins >= threshold ? 1 : 0;
+            if (joins >= threshold * attackMultiplier) {
                 recordViolation(id, "join-flood-attack-mode");
                 Bukkit.getScheduler().runTask(this, () -> player.kickPlayer(
                         getConfig().getString("messages.join-flood", "§cJoin flood protection is active.")));
@@ -103,7 +103,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
             }
             if (joins >= threshold
                     || getConfig().getBoolean("antibot.always-check-new-players", false)
-                    || (!player.hasPlayedBefore() && getConfig().getBoolean("new-account-protection.enabled", true))) {
+                    || (getConfig().getBoolean("new-account-protection.enabled", true) && isNewAccount(player))) {
                 Bukkit.getScheduler().runTask(this, () -> activateChallenge(player));
             }
         }).exceptionally(error -> { getLogger().warning("Verification lookup failed: " + error.getMessage()); return null; });
@@ -262,7 +262,8 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     }
 
     private boolean bypass(Player player) {
-        return player.isOp() || player.hasPermission("voidflame.security.bypass") || whitelist.contains(player.getUniqueId());
+        return player.isOp() || player.hasPermission("voidflame.security.bypass")
+                || (getConfig().getBoolean("whitelist.enabled", true) && whitelist.contains(player.getUniqueId()));
     }
 
     private void loadWhitelistAsync() {
@@ -280,8 +281,15 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         captchaSlots.remove(id);
         if (success) {
             verified.add(id);
-            storage.put("security", "verified:" + id, Long.toString(System.currentTimeMillis() + VERIFIED_MS)).exceptionally(error -> { getLogger().warning("Could not persist verification for " + id + ": " + error.getMessage()); return null; });
+            storage.put("security", "verified:" + id, Long.toString(System.currentTimeMillis() + Math.max(1L, getConfig().getLong("captcha.verification-hours", 24L)) * 60L * 60L * 1000L)).exceptionally(error -> { getLogger().warning("Could not persist verification for " + id + ": " + error.getMessage()); return null; });
         }
+    }
+
+    private boolean isNewAccount(Player player) {
+        if (!player.hasPlayedBefore()) return true;
+        long firstPlayed = player.getFirstPlayed();
+        long minAgeDays = Math.max(0L, getConfig().getLong("new-account-protection.min-account-age-days", 7L));
+        return firstPlayed > 0 && System.currentTimeMillis() - firstPlayed < minAgeDays * 24L * 60L * 60L * 1000L;
     }
 
     public boolean allowAction(UUID player) {
