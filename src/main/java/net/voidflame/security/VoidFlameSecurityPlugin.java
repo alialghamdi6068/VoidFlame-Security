@@ -250,7 +250,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
             if (raw != null && !raw.isBlank()) for (String value : raw.split(",")) {
                 try { whitelist.add(UUID.fromString(value)); } catch (IllegalArgumentException ignored) {}
             }
-        } catch (ReflectiveOperationException ignored) {}
+        } catch (RuntimeException ignored) {}
     }
 
     public boolean allowAction(UUID player) {
