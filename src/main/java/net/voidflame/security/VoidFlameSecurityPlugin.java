@@ -1,5 +1,7 @@
 package net.voidflame.security;
 
+import net.voidflame.core.storage.StorageService;
+
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -14,10 +16,8 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,9 +26,7 @@ import java.util.concurrent.ScheduledFuture;
 public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listener {
     private static final long VERIFIED_MS = 24L * 60L * 60L * 1000L;
 
-    private Object storage;
-    private Method put;
-    private Method get;
+    private StorageService storage;
     private final ConcurrentHashMap<UUID, Deque<Long>> actionWindows = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Long> joinTimes = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Integer> captchaSlots = new ConcurrentHashMap<>();
@@ -56,18 +54,10 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     }
 
     private boolean connectStorage() {
-        try {
-            Class<?> type = Class.forName("net.voidflame.core.storage.StorageService");
-            RegisteredServiceProvider<?> registration = getServer().getServicesManager().getRegistration(type);
-            if (registration == null) return false;
-            storage = registration.getProvider();
-            put = type.getMethod("put", String.class, String.class, String.class);
-            get = type.getMethod("get", String.class, String.class);
-            return true;
-        } catch (ReflectiveOperationException ex) {
-            getLogger().severe("Storage connection failed: " + ex.getMessage());
-            return false;
-        }
+        var registration = getServer().getServicesManager().getRegistration(StorageService.class);
+        if (registration == null) return false;
+        storage = registration.getProvider();
+        return storage != null;
     }
 
     @EventHandler
@@ -232,14 +222,13 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         UUID id = player.getUniqueId();
         if (verified.contains(id)) return;
         try {
-            @SuppressWarnings("unchecked")
-            CompletableFuture<String> future = (CompletableFuture<String>) get.invoke(storage, "security", "verified:" + id);
+            CompletableFuture<String> future = storage.get("security", "verified:" + id);
             future.thenAccept(value -> {
                 if (value == null) return;
                 try {
                     long expires = Long.parseLong(value);
                     if (expires > System.currentTimeMillis()) verified.add(id);
-                    else { try { put.invoke(storage, "security", "verified:" + id, "0"); } catch (ReflectiveOperationException ignored) {} }
+                    else { storage.put("security", "verified:" + id, "0"); }
                 } catch (NumberFormatException ignored) {}
             });
         } catch (ReflectiveOperationException ignored) {}
@@ -251,14 +240,13 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         captchaSlots.remove(id);
         if (success) {
             verified.add(id);
-            try { put.invoke(storage, "security", "verified:" + id, Long.toString(System.currentTimeMillis() + VERIFIED_MS)); }
-            catch (ReflectiveOperationException ex) { getLogger().warning("Could not persist verification for " + id); }
+            storage.put("security", "verified:" + id, Long.toString(System.currentTimeMillis() + VERIFIED_MS)).exceptionally(error -> { getLogger().warning("Could not persist verification for " + id + ": " + error.getMessage()); return null; });
         }
     }
 
     private void loadWhitelist() {
         try {
-            String raw = (String) get.invoke(storage, "security", "whitelist");
+            String raw = storage.get("security", "whitelist").join();
             if (raw != null && !raw.isBlank()) for (String value : raw.split(",")) {
                 try { whitelist.add(UUID.fromString(value)); } catch (IllegalArgumentException ignored) {}
             }
@@ -278,12 +266,8 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     }
 
     public CompletableFuture<Void> recordViolation(UUID player, String reason) {
-        try {
-            String key = "violation:" + player + ":" + System.currentTimeMillis();
-            return (CompletableFuture<Void>) put.invoke(storage, "security", key, reason);
-        } catch (ReflectiveOperationException ex) {
-            return CompletableFuture.failedFuture(ex);
-        }
+        String key = "violation:" + player + ":" + System.currentTimeMillis();
+        return storage.put("security", key, reason);
     }
 
     private boolean command(org.bukkit.command.CommandSender sender, String[] args) {
@@ -316,11 +300,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         else if (args[1].equalsIgnoreCase("remove")) whitelist.remove(id);
         else { sender.sendMessage("§cUse add or remove."); return; }
         String value = String.join(",", whitelist.stream().map(UUID::toString).toList());
-        try { put.invoke(storage, "security", "whitelist", value); }
-        catch (ReflectiveOperationException ex) {
-            sender.sendMessage("§cCould not persist whitelist.");
-            return;
-        }
+        storage.put("security", "whitelist", value).exceptionally(error -> { getLogger().warning("Could not persist whitelist: " + error.getMessage()); return null; });
         sender.sendMessage("§aWhitelist updated.");
     }
 
