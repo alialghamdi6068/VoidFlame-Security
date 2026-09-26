@@ -1,18 +1,18 @@
 settings:
   enabled: true
   module: security
-  max-actions-per-second: 12
+  max-actions-per-second: 8
   violation-window-seconds: 10
 
 antibot:
-  join-threshold: 6
-  join-window-seconds: 10
-  always-check-new-players: false
+  join-threshold: 4
+  join-window-seconds: 8
+  always-check-new-players: true
 
 captcha:
   size: 27
-  timeout-seconds: 20
-  max-attempts: 3
+  timeout-seconds: 15
+  max-attempts: 2
   title: "§8🛡 Security Verification"
   correct-item: EMERALD
   filler-item: GRAY_STAINED_GLASS_PANE
