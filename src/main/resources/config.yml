@@ -3,3 +3,22 @@ settings:
   module: security
   max-actions-per-second: 12
   violation-window-seconds: 10
+
+antibot:
+  join-threshold: 6
+  join-window-seconds: 10
+  always-check-new-players: false
+
+captcha:
+  size: 27
+  timeout-seconds: 20
+  title: "§8🛡 Security Verification"
+  correct-item: EMERALD
+  filler-item: GRAY_STAINED_GLASS_PANE
+  correct-name: "§aClick the correct item"
+  filler-name: "§7Verification"
+
+messages:
+  verified: "§a✓ Verification successful."
+  failed: "§cVerification failed."
+  timeout: "§cVerification timed out."
