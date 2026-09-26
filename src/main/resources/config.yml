@@ -25,3 +25,17 @@ messages:
   verified: "§a✓ Verification successful."
   failed: "§cVerification failed."
   timeout: "§cVerification timed out."
+
+new-account-protection:
+  enabled: true
+
+escalation:
+  verify-score: 5
+  throttle-score: 10
+  block-score: 20
+  block-seconds: 60
+
+messages:
+  join-flood: "§cJoin flood protection is active."
+  temporarily-blocked: "§cSecurity protection is active. Please try again later."
+  escalated-kick: "§cSecurity protection triggered."
