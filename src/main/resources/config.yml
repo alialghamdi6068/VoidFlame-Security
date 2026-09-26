@@ -3,6 +3,8 @@ settings:
   module: security
   max-actions-per-second: 8
   violation-window-seconds: 10
+  action-rate-kick-threshold: 30
+  join-burst-protection: true
 
 antibot:
   join-threshold: 4
