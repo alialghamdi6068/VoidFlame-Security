@@ -21,6 +21,7 @@ captcha:
   size: 27
   timeout-seconds: 15
   max-attempts: 2
+  verification-hours: 24
   title: "§8🛡 Security Verification"
   correct-item: EMERALD
   filler-item: GRAY_STAINED_GLASS_PANE
