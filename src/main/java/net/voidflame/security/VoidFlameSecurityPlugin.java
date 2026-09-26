@@ -184,9 +184,12 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         }
     }
 
-    @EventHandler
+    @EventHandler(ignoreCancelled = true)
     public void onDamage(EntityDamageEvent event) {
-        if (event.getEntity() instanceof Player player && checking.contains(player.getUniqueId())) event.setCancelled(true);
+        if (!(event.getEntity() instanceof Player player)) return;
+        UUID id = player.getUniqueId();
+        if (checking.contains(id)) { event.setCancelled(true); return; }
+        if (!allowAction(id)) { event.setCancelled(true); recordViolation(id, "combat-rate-limit"); }
     }
 
     @EventHandler
@@ -243,14 +246,6 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         UUID id = event.getPlayer().getUniqueId();
         if (checking.contains(id)) { event.setCancelled(true); return; }
         if (!allowAction(id)) { event.setCancelled(true); recordViolation(id, "block-break-rate-limit"); }
-    }
-
-    @EventHandler(ignoreCancelled = true)
-    public void onDamage(EntityDamageEvent event) {
-        if (!(event.getEntity() instanceof Player player)) return;
-        UUID id = player.getUniqueId();
-        if (checking.contains(id)) { event.setCancelled(true); return; }
-        if (!allowAction(id)) { event.setCancelled(true); recordViolation(id, "combat-rate-limit"); }
     }
 
     @EventHandler
