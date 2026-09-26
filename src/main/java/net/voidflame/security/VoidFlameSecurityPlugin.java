@@ -9,6 +9,8 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.*;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.block.BlockBreakEvent;
@@ -191,6 +193,24 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     }
 
     @EventHandler
+    public void onInventoryAction(InventoryClickEvent event) {
+        if (event.getWhoClicked() instanceof Player player && !checking.contains(player.getUniqueId())
+                && !allowAction(player.getUniqueId())) {
+            event.setCancelled(true);
+            recordViolation(player.getUniqueId(), "inventory-rate-limit");
+        }
+    }
+
+    @EventHandler
+    public void onInteract(PlayerInteractEvent event) {
+        Player player = event.getPlayer();
+        if (!checking.contains(player.getUniqueId()) && !allowAction(player.getUniqueId())) {
+            event.setCancelled(true);
+            recordViolation(player.getUniqueId(), "interaction-rate-limit");
+        }
+    }
+
+    @EventHandler
     public void onBlockPlace(BlockPlaceEvent event) {
         if (checking.contains(event.getPlayer().getUniqueId())) event.setCancelled(true);
     }
@@ -209,18 +229,10 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         captchaSlots.remove(id);
         captchaAttempts.remove(id);
         captchaStarted.remove(id);
-        captchaAttempts.remove(id);
-        captchaStarted.remove(id);
-        captchaAttempts.remove(id);
-        captchaStarted.remove(id);
     }
 
     private boolean bypass(Player player) {
         return player.isOp() || player.hasPermission("voidflame.security.bypass") || whitelist.contains(player.getUniqueId());
-    }
-
-    private boolean isVerified(UUID id) {
-        return verified.contains(id);
     }
 
     private void loadWhitelistAsync() {
@@ -240,15 +252,6 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
             verified.add(id);
             storage.put("security", "verified:" + id, Long.toString(System.currentTimeMillis() + VERIFIED_MS)).exceptionally(error -> { getLogger().warning("Could not persist verification for " + id + ": " + error.getMessage()); return null; });
         }
-    }
-
-    private void loadWhitelist() {
-        try {
-            String raw = storage.get("security", "whitelist").join();
-            if (raw != null && !raw.isBlank()) for (String value : raw.split(",")) {
-                try { whitelist.add(UUID.fromString(value)); } catch (IllegalArgumentException ignored) {}
-            }
-        } catch (RuntimeException ignored) {}
     }
 
     public boolean allowAction(UUID player) {
