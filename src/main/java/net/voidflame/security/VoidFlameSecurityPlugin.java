@@ -36,6 +36,9 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     private final Set<UUID> whitelist = ConcurrentHashMap.newKeySet();
     private final ConcurrentHashMap<UUID, Integer> captchaAttempts = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Long> captchaStarted = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, Integer> riskScores = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, Long> blockedUntil = new ConcurrentHashMap<>();
+    private volatile int protectionLevel = 0;
     private volatile boolean enabled;
 
     @Override
@@ -69,6 +72,11 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         joinTimes.put(id, now);
 
         if (!enabled || bypass(player)) return;
+        long blocked = blockedUntil.getOrDefault(id, 0L);
+        if (blocked > now) {
+            player.kickPlayer(getConfig().getString("messages.temporarily-blocked", "§cSecurity protection is active. Please try again later."));
+            return;
+        }
         storage.get("security", "verified:" + id).thenAccept(value -> {
             boolean alreadyVerified = false;
             if (value != null) {
@@ -81,7 +89,16 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
             long window = Math.max(1, getConfig().getLong("antibot.join-window-seconds", 10)) * 1000L;
             int threshold = Math.max(1, getConfig().getInt("antibot.join-threshold", 6));
             long joins = joinTimes.values().stream().filter(t -> now - t <= window).count();
-            if (joins >= threshold || getConfig().getBoolean("antibot.always-check-new-players", false)) {
+            protectionLevel = joins >= threshold * 3L ? 3 : joins >= threshold * 2L ? 2 : joins >= threshold ? 1 : 0;
+            if (joins >= threshold * 3L) {
+                recordViolation(id, "join-flood-attack-mode");
+                Bukkit.getScheduler().runTask(this, () -> player.kickPlayer(
+                        getConfig().getString("messages.join-flood", "§cJoin flood protection is active.")));
+                return;
+            }
+            if (joins >= threshold
+                    || getConfig().getBoolean("antibot.always-check-new-players", false)
+                    || (!player.hasPlayedBefore() && getConfig().getBoolean("new-account-protection.enabled", true))) {
                 Bukkit.getScheduler().runTask(this, () -> activateChallenge(player));
             }
         }).exceptionally(error -> { getLogger().warning("Verification lookup failed: " + error.getMessage()); return null; });
@@ -224,6 +241,8 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         UUID id = event.getPlayer().getUniqueId();
         actionWindows.remove(id);
         joinTimes.remove(id);
+        riskScores.remove(id);
+        blockedUntil.remove(id);
         checking.remove(id);
         captchaSlots.remove(id);
         captchaAttempts.remove(id);
@@ -255,7 +274,8 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
 
     public boolean allowAction(UUID player) {
         long now = System.currentTimeMillis();
-        int max = Math.max(1, getConfig().getInt("settings.max-actions-per-second", 12));
+        int configured = Math.max(1, getConfig().getInt("settings.max-actions-per-second", 12));
+        int max = protectionLevel >= 2 ? Math.max(1, configured / 2) : configured;
         Deque<Long> window = actionWindows.computeIfAbsent(player, ignored -> new ArrayDeque<>());
         synchronized (window) {
             while (!window.isEmpty() && now - window.peekFirst() >= 1000L) window.removeFirst();
@@ -266,8 +286,28 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     }
 
     public CompletableFuture<Void> recordViolation(UUID player, String reason) {
+        int score = riskScores.merge(player, 1, Integer::sum);
+        int verifyAt = Math.max(1, getConfig().getInt("escalation.verify-score", 5));
+        int throttleAt = Math.max(verifyAt, getConfig().getInt("escalation.throttle-score", 10));
+        int blockAt = Math.max(throttleAt, getConfig().getInt("escalation.block-score", 20));
+        if (score >= blockAt) {
+            blockedUntil.put(player, System.currentTimeMillis()
+                    + Math.max(5, getConfig().getLong("escalation.block-seconds", 60)) * 1000L);
+            protectionLevel = Math.max(protectionLevel, 3);
+            Player online = Bukkit.getPlayer(player);
+            if (online != null) Bukkit.getScheduler().runTask(this, () ->
+                    online.kickPlayer(getConfig().getString("messages.escalated-kick", "§cSecurity protection triggered.")));
+        } else if (score >= throttleAt) {
+            protectionLevel = Math.max(protectionLevel, 2);
+        } else if (score >= verifyAt) {
+            protectionLevel = Math.max(protectionLevel, 1);
+            Player online = Bukkit.getPlayer(player);
+            if (online != null && !checking.contains(player) && !bypass(online)) {
+                Bukkit.getScheduler().runTask(this, () -> activateChallenge(online));
+            }
+        }
         String key = "violation:" + player + ":" + System.currentTimeMillis();
-        return storage.put("security", key, reason);
+        return storage.put("security", key, reason + "|score=" + score + "|level=" + protectionLevel);
     }
 
     private boolean command(org.bukkit.command.CommandSender sender, String[] args) {
@@ -278,6 +318,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
             sender.sendMessage("§7Status: " + (enabled ? "§aON" : "§cOFF"));
             sender.sendMessage("§7Verifying: §f" + checking.size());
             sender.sendMessage("§7Whitelist: §f" + whitelist.size());
+            sender.sendMessage("§7Protection level: §f" + protectionLevel);
             sender.sendMessage("§8§m----------------");
             return true;
         }
