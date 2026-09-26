@@ -316,7 +316,11 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         else if (args[1].equalsIgnoreCase("remove")) whitelist.remove(id);
         else { sender.sendMessage("§cUse add or remove."); return; }
         String value = String.join(",", whitelist.stream().map(UUID::toString).toList());
-        put.invoke(storage, "security", "whitelist", value);
+        try { put.invoke(storage, "security", "whitelist", value); }
+        catch (ReflectiveOperationException ex) {
+            sender.sendMessage("§cCould not persist whitelist.");
+            return;
+        }
         sender.sendMessage("§aWhitelist updated.");
     }
 
