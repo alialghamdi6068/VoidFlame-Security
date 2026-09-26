@@ -9,6 +9,12 @@ settings:
   exploit-detection: true
   false-positive-cooldown-seconds: 30
   whitelist-enabled: true
+  whitelist-gui-size: 54
+  whitelist-gui-title: "§8Security Whitelist"
+  whitelist-gui-player-item: LIME_DYE
+  whitelist-gui-player-name: "§a<player>"
+  whitelist-gui-disabled-item: GRAY_DYE
+  whitelist-gui-disabled-name: "§7<player>"
 
 antibot:
   join-threshold: 4
