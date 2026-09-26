@@ -1,6 +1,7 @@
 package net.voidflame.security;
 
 import net.voidflame.core.storage.StorageService;
+import net.voidflame.core.api.AuditLogService;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -40,6 +41,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     private final ConcurrentHashMap<UUID, Long> blockedUntil = new ConcurrentHashMap<>();
     private volatile int protectionLevel = 0;
     private volatile boolean enabled;
+    private AuditLogService auditLogs;
 
     @Override
     public void onEnable() {
@@ -54,6 +56,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         getServer().getPluginManager().registerEvents(this, this);
         Objects.requireNonNull(getCommand("antibot")).setExecutor((sender, command, label, args) -> command(sender, args));
         Objects.requireNonNull(getCommand("antibot")).setTabCompleter((sender, command, alias, args) -> tabComplete(args));
+        getServer().getScheduler().runTaskTimer(this, this::decayProtection, 20L * 30L, 20L * 30L);
         getLogger().info("VoidFlame-Security enabled: AntiBot + rate protection.");
     }
 
@@ -61,6 +64,8 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         var registration = getServer().getServicesManager().getRegistration(StorageService.class);
         if (registration == null) return false;
         storage = registration.getProvider();
+        var logs = getServer().getServicesManager().getRegistration(AuditLogService.class);
+        auditLogs = logs == null ? null : logs.getProvider();
         return storage != null;
     }
 
@@ -228,12 +233,24 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
 
     @EventHandler
     public void onBlockPlace(BlockPlaceEvent event) {
-        if (checking.contains(event.getPlayer().getUniqueId())) event.setCancelled(true);
+        UUID id = event.getPlayer().getUniqueId();
+        if (checking.contains(id)) { event.setCancelled(true); return; }
+        if (!allowAction(id)) { event.setCancelled(true); recordViolation(id, "block-place-rate-limit"); }
     }
 
     @EventHandler
     public void onBlockBreak(BlockBreakEvent event) {
-        if (checking.contains(event.getPlayer().getUniqueId())) event.setCancelled(true);
+        UUID id = event.getPlayer().getUniqueId();
+        if (checking.contains(id)) { event.setCancelled(true); return; }
+        if (!allowAction(id)) { event.setCancelled(true); recordViolation(id, "block-break-rate-limit"); }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onDamage(EntityDamageEvent event) {
+        if (!(event.getEntity() instanceof Player player)) return;
+        UUID id = player.getUniqueId();
+        if (checking.contains(id)) { event.setCancelled(true); return; }
+        if (!allowAction(id)) { event.setCancelled(true); recordViolation(id, "combat-rate-limit"); }
     }
 
     @EventHandler
@@ -307,7 +324,19 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
             }
         }
         String key = "violation:" + player + ":" + System.currentTimeMillis();
-        return storage.put("security", key, reason + "|score=" + score + "|level=" + protectionLevel);
+        CompletableFuture<Void> persisted = storage.put("security", key, reason + "|score=" + score + "|level=" + protectionLevel);
+        if (auditLogs != null) {
+            auditLogs.log(player.toString(), "SECURITY_VIOLATION", player.toString(),
+                    "reason=" + reason + "|score=" + score + "|level=" + protectionLevel);
+        }
+        return persisted;
+    }
+
+    private void decayProtection() {
+        if (protectionLevel > 0) protectionLevel--;
+        long now = System.currentTimeMillis();
+        blockedUntil.entrySet().removeIf(entry -> entry.getValue() <= now);
+        riskScores.replaceAll((uuid, score) -> Math.max(0, score - 1));
     }
 
     private boolean command(org.bukkit.command.CommandSender sender, String[] args) {
