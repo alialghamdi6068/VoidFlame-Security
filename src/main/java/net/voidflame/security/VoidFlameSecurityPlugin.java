@@ -21,6 +21,7 @@ import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledFuture;
 
 public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listener {
     private static final long VERIFIED_MS = 24L * 60L * 60L * 1000L;
@@ -34,6 +35,8 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     private final Set<UUID> checking = ConcurrentHashMap.newKeySet();
     private final Set<UUID> verified = ConcurrentHashMap.newKeySet();
     private final Set<UUID> whitelist = ConcurrentHashMap.newKeySet();
+    private final ConcurrentHashMap<UUID, Integer> captchaAttempts = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, Long> captchaStarted = new ConcurrentHashMap<>();
     private volatile boolean enabled;
 
     @Override
@@ -94,6 +97,8 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         int slots = size / 9;
         int correct = new Random().nextInt(size);
         captchaSlots.put(player.getUniqueId(), correct);
+        captchaAttempts.put(player.getUniqueId(), 0);
+        captchaStarted.put(player.getUniqueId(), System.currentTimeMillis());
 
         Bukkit.getScheduler().runTask(this, () -> {
             if (!player.isOnline()) { finishCheck(player, false); return; }
@@ -123,7 +128,15 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         if (!event.getView().getTitle().equals(getConfig().getString("captcha.title", "§8Security Verification"))) return;
 
         Integer correct = captchaSlots.get(player.getUniqueId());
+        int attempts = captchaAttempts.merge(player.getUniqueId(), 1, Integer::sum);
+        int maxAttempts = Math.max(1, getConfig().getInt("captcha.max-attempts", 3));
         if (correct == null) return;
+        if (attempts > maxAttempts) {
+            finishCheck(player, false);
+            player.closeInventory();
+            player.kickPlayer(getConfig().getString("messages.failed", "§cVerification failed."));
+            return;
+        }
         if (event.getRawSlot() == correct) {
             finishCheck(player, true);
             player.closeInventory();
@@ -199,6 +212,12 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         joinTimes.remove(id);
         checking.remove(id);
         captchaSlots.remove(id);
+        captchaAttempts.remove(id);
+        captchaStarted.remove(id);
+        captchaAttempts.remove(id);
+        captchaStarted.remove(id);
+        captchaAttempts.remove(id);
+        captchaStarted.remove(id);
     }
 
     private boolean bypass(Player player) {
@@ -232,7 +251,8 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         captchaSlots.remove(id);
         if (success) {
             verified.add(id);
-            put.invoke(storage, "security", "verified:" + id, Long.toString(System.currentTimeMillis() + VERIFIED_MS));
+            try { put.invoke(storage, "security", "verified:" + id, Long.toString(System.currentTimeMillis() + VERIFIED_MS)); }
+            catch (ReflectiveOperationException ex) { getLogger().warning("Could not persist verification for " + id); }
         }
     }
 
