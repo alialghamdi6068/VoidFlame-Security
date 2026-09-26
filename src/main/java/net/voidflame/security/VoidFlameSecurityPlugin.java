@@ -74,7 +74,8 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         long now = System.currentTimeMillis();
         joinTimes.put(id, now);
 
-        if (!enabled || bypass(player) || isVerified(id)) return;
+        if (!enabled || bypass(player)) return;
+        loadVerified(player);
 
         long window = Math.max(1, getConfig().getLong("antibot.join-window-seconds", 10)) * 1000L;
         int threshold = Math.max(1, getConfig().getInt("antibot.join-threshold", 6));
@@ -146,9 +147,8 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     @EventHandler
     public void onMove(PlayerMoveEvent event) {
         if (checking.contains(event.getPlayer().getUniqueId())
-                && event.getFrom().getBlockX() != event.getTo().getBlockX()
-                || checking.contains(event.getPlayer().getUniqueId())
-                && event.getFrom().getBlockZ() != event.getTo().getBlockZ()) {
+                && (event.getFrom().getBlockX() != event.getTo().getBlockX()
+                || event.getFrom().getBlockZ() != event.getTo().getBlockZ())) {
             event.setTo(event.getFrom());
         }
     }
@@ -207,6 +207,23 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
 
     private boolean isVerified(UUID id) {
         return verified.contains(id);
+    }
+
+    private void loadVerified(Player player) {
+        UUID id = player.getUniqueId();
+        if (verified.contains(id)) return;
+        try {
+            @SuppressWarnings("unchecked")
+            CompletableFuture<String> future = (CompletableFuture<String>) get.invoke(storage, "security", "verified:" + id);
+            future.thenAccept(value -> {
+                if (value == null) return;
+                try {
+                    long expires = Long.parseLong(value);
+                    if (expires > System.currentTimeMillis()) verified.add(id);
+                    else put.invoke(storage, "security", "verified:" + id, "0");
+                } catch (NumberFormatException ignored) {}
+            });
+        } catch (ReflectiveOperationException ignored) {}
     }
 
     private void finishCheck(Player player, boolean success) {
