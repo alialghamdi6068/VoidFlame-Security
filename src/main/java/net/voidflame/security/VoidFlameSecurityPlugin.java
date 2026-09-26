@@ -75,7 +75,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         long now = System.currentTimeMillis();
         joinTimes.put(id, now);
 
-        if (!enabled || bypass(player)) return;
+        if (!enabled || bypassCaptcha(player)) return;
         long blocked = blockedUntil.getOrDefault(id, 0L);
         if (blocked > now) {
             player.kickPlayer(getConfig().getString("messages.temporarily-blocked", "§cSecurity protection is active. Please try again later."));
@@ -89,7 +89,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
                     if (alreadyVerified) verified.add(id);
                 } catch (NumberFormatException ignored) {}
             }
-            if (alreadyVerified || !player.isOnline() || bypass(player)) return;
+            if (alreadyVerified || !player.isOnline() || bypassCaptcha(player)) return;
             long window = Math.max(1, getConfig().getLong("antibot.join-window-seconds", 10)) * 1000L;
             int threshold = Math.max(1, getConfig().getInt("antibot.join-threshold", 6));
             long joins = joinTimes.values().stream().filter(t -> now - t <= window).count();
@@ -261,9 +261,23 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         captchaStarted.remove(id);
     }
 
-    private boolean bypass(Player player) {
+    private boolean whitelisted(Player player) {
+        return getConfig().getBoolean("whitelist.enabled", true) && whitelist.contains(player.getUniqueId());
+    }
+
+    private boolean bypassCaptcha(Player player) {
         return player.isOp() || player.hasPermission("voidflame.security.bypass")
-                || (getConfig().getBoolean("whitelist.enabled", true) && whitelist.contains(player.getUniqueId()));
+                || (whitelisted(player) && getConfig().getBoolean("whitelist.bypass-captcha", true));
+    }
+
+    private boolean bypassRateLimits(UUID id) {
+        Player player = Bukkit.getPlayer(id);
+        return player != null && bypassRateLimits(player);
+    }
+
+    private boolean bypassRateLimits(Player player) {
+        return player.isOp() || player.hasPermission("voidflame.security.bypass")
+                || (whitelisted(player) && getConfig().getBoolean("whitelist.bypass-rate-limits", true));
     }
 
     private void loadWhitelistAsync() {
@@ -295,6 +309,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     public boolean allowAction(UUID player) {
         long now = System.currentTimeMillis();
         int configured = Math.max(1, getConfig().getInt("settings.max-actions-per-second", 12));
+        if (bypassRateLimits(player)) return true;
         int max = protectionLevel >= 2 ? Math.max(1, configured / 2) : configured;
         Deque<Long> window = actionWindows.computeIfAbsent(player, ignored -> new ArrayDeque<>());
         synchronized (window) {
@@ -322,7 +337,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         } else if (score >= verifyAt) {
             protectionLevel = Math.max(protectionLevel, 1);
             Player online = Bukkit.getPlayer(player);
-            if (online != null && !checking.contains(player) && !bypass(online)) {
+            if (online != null && !checking.contains(player) && !bypassCaptcha(online)) {
                 Bukkit.getScheduler().runTask(this, () -> activateChallenge(online));
             }
         }
@@ -358,7 +373,8 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
             case "on" -> { enabled = true; getConfig().set("settings.enabled", true); saveConfig(); sender.sendMessage("§aAntiBot enabled."); }
             case "off" -> { enabled = false; getConfig().set("settings.enabled", false); saveConfig(); checking.forEach(id -> { Player p=Bukkit.getPlayer(id); if(p!=null) p.closeInventory(); }); checking.clear(); captchaSlots.clear(); sender.sendMessage("§cAntiBot disabled."); }
             case "whitelist" -> handleWhitelist(sender, args);
-            default -> sender.sendMessage("§cUsage: /antibot <on|off|status|whitelist add|remove <player>>");
+            case "gui" -> { if (sender instanceof Player player) openWhitelistGui(player); }
+            default -> sender.sendMessage("§cUsage: /antibot <on|off|status|whitelist add|remove <player>|gui>");
         }
         return true;
     }
@@ -378,11 +394,50 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     }
 
     private List<String> tabComplete(String[] args) {
-        if (args.length == 1) return List.of("on", "off", "status", "whitelist");
+        if (args.length == 1) return List.of("on", "off", "status", "whitelist", "gui");
         if (args.length == 2 && args[0].equalsIgnoreCase("whitelist")) return List.of("add", "remove");
         return List.of();
     }
 
+    private void openWhitelistGui(Player viewer) {
+        int size = Math.max(9, Math.min(54, getConfig().getInt("settings.whitelist-gui-size", 54)));
+        size -= size % 9;
+        Inventory inv = Bukkit.createInventory(null, size, getConfig().getString("settings.whitelist-gui-title", "§8Security Whitelist"));
+        List<Player> players = new ArrayList<>(Bukkit.getOnlinePlayers());
+        players.sort(Comparator.comparing(Player::getName, String.CASE_INSENSITIVE_ORDER));
+        Material enabled = material("settings.whitelist-gui-player-item", Material.LIME_DYE);
+        Material disabled = material("settings.whitelist-gui-disabled-item", Material.GRAY_DYE);
+        String enabledName = getConfig().getString("settings.whitelist-gui-player-name", "§a<player>");
+        String disabledName = getConfig().getString("settings.whitelist-gui-disabled-name", "§7<player>");
+        for (int i = 0; i < Math.min(players.size(), size); i++) {
+            Player target = players.get(i);
+            boolean active = whitelist.contains(target.getUniqueId());
+            inv.setItem(i, item(active ? enabled : disabled, (active ? enabledName : disabledName).replace("<player>", target.getName())));
+        }
+        viewer.openInventory(inv);
+    }
+
+    @EventHandler
+    public void onWhitelistGuiClick(InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player viewer)) return;
+        String title = getConfig().getString("settings.whitelist-gui-title", "§8Security Whitelist");
+        if (!event.getView().getTitle().equals(title)) return;
+        event.setCancelled(true);
+        int slot = event.getRawSlot();
+        if (slot < 0 || slot >= event.getInventory().getSize()) return;
+        List<Player> players = new ArrayList<>(Bukkit.getOnlinePlayers());
+        players.sort(Comparator.comparing(Player::getName, String.CASE_INSENSITIVE_ORDER));
+        if (slot >= players.size()) return;
+        UUID id = players.get(slot).getUniqueId();
+        if (!whitelist.add(id)) whitelist.remove(id);
+        persistWhitelist();
+        openWhitelistGui(viewer);
+    }
+
+    private void persistWhitelist() {
+        String value = String.join(",", whitelist.stream().map(UUID::toString).sorted().toList());
+        storage.put("security", "whitelist", value).exceptionally(error -> { getLogger().warning("Could not persist whitelist: " + error.getMessage()); return null; });
+    }
     private Material material(String path, Material fallback) {
         Material m = Material.matchMaterial(getConfig().getString(path, fallback.name()));
         return m == null ? fallback : m;
