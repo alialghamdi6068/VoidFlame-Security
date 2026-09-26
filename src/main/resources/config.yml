@@ -5,11 +5,17 @@ settings:
   violation-window-seconds: 10
   action-rate-kick-threshold: 30
   join-burst-protection: true
+  packet-abuse-protection: true
+  exploit-detection: true
+  false-positive-cooldown-seconds: 30
+  whitelist-enabled: true
 
 antibot:
   join-threshold: 4
   join-window-seconds: 8
   always-check-new-players: true
+  attack-mode-multiplier: 3
+  decay-seconds: 300
 
 captcha:
   size: 27
@@ -31,6 +37,8 @@ messages:
 
 new-account-protection:
   enabled: true
+  min-account-age-days: 7
+  max-actions-per-minute: 30
 
 escalation:
   verify-score: 5
@@ -38,3 +46,8 @@ escalation:
   block-score: 20
   block-seconds: 60
 
+whitelist:
+  enabled: true
+  bypass-captcha: true
+  bypass-rate-limits: true
+  bypass-new-account-protection: true
