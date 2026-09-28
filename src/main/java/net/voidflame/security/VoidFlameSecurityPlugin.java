@@ -37,6 +37,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     private final ConcurrentHashMap<UUID, Long> captchaStarted = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Integer> riskScores = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Long> blockedUntil = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Long> violationCooldowns = new ConcurrentHashMap<>();
     private volatile int protectionLevel = 0;
     private volatile boolean enabled;
     private AuditLogService auditLogs;
@@ -259,6 +260,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         captchaSlots.remove(id);
         captchaAttempts.remove(id);
         captchaStarted.remove(id);
+        violationCooldowns.keySet().removeIf(key -> key.startsWith(id.toString() + "|"));
     }
 
     private boolean whitelisted(Player player) {
@@ -321,6 +323,11 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     }
 
     public CompletableFuture<Void> recordViolation(UUID player, String reason) {
+        long now = System.currentTimeMillis();
+        long cooldown = Math.max(0L, getConfig().getLong("settings.false-positive-cooldown-seconds", 30L)) * 1000L;
+        String cooldownKey = player + "|" + reason;
+        Long previous = violationCooldowns.put(cooldownKey, now);
+        if (previous != null && cooldown > 0L && now - previous < cooldown) return CompletableFuture.completedFuture(null);
         int score = riskScores.merge(player, 1, Integer::sum);
         int verifyAt = Math.max(1, getConfig().getInt("escalation.verify-score", 5));
         int throttleAt = Math.max(verifyAt, getConfig().getInt("escalation.throttle-score", 10));
