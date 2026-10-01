@@ -195,6 +195,9 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
 
     @EventHandler
     public void onCommand(PlayerCommandPreprocessEvent event) {
+        if (!enabled) return;
+        if (!enabled) return;
+        if (!enabled) return;
         if (checking.contains(event.getPlayer().getUniqueId())) {
             event.setCancelled(true);
             return;
@@ -302,6 +305,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     }
 
     private boolean isNewAccount(Player player) {
+        if (whitelist.contains(player.getUniqueId()) && getConfig().getBoolean("whitelist.bypass-new-account-protection", true)) return false;
         if (!player.hasPlayedBefore()) return true;
         long firstPlayed = player.getFirstPlayed();
         long minAgeDays = Math.max(0L, getConfig().getLong("new-account-protection.min-account-age-days", 7L));
