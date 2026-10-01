@@ -1,3 +1,8 @@
+# ================================================================
+# VoidFlame Security • Production Configuration
+# Paper 26.2 • Java 25
+# ================================================================
+# Anti-bot, CAPTCHA, rate limits, escalation and whitelist controls.
 settings:
   enabled: true
   module: security
