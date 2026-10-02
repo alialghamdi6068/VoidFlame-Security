@@ -268,6 +268,14 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         violationCooldowns.keySet().removeIf(key -> key.startsWith(id.toString() + "|"));
     }
 
+    public boolean isSecurityTrusted(UUID id) {
+        Player player = Bukkit.getPlayer(id);
+        return player != null && (player.isOp()
+                || player.hasPermission("voidflame.security.bypass")
+                || whitelisted(player)
+                || verified.contains(id));
+    }
+
     private boolean whitelisted(Player player) {
         return getConfig().getBoolean("whitelist.enabled", true) && whitelist.contains(player.getUniqueId());
     }
