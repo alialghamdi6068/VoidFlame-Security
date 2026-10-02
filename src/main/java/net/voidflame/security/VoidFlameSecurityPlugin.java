@@ -189,6 +189,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
 
     @EventHandler
     public void onMove(PlayerMoveEvent event) {
+        if (authRequired.contains(event.getPlayer().getUniqueId())) { event.setTo(event.getFrom()); return; }
         if (checking.contains(event.getPlayer().getUniqueId())
                 && (event.getFrom().getBlockX() != event.getTo().getBlockX()
                 || event.getFrom().getBlockZ() != event.getTo().getBlockZ())) {
@@ -200,6 +201,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     public void onDamage(EntityDamageEvent event) {
         if (!(event.getEntity() instanceof Player player)) return;
         UUID id = player.getUniqueId();
+        if (authRequired.contains(id)) { event.setCancelled(true); return; }
         if (checking.contains(id)) { event.setCancelled(true); return; }
         if (!allowAction(id)) { event.setCancelled(true); recordViolation(id, "combat-rate-limit"); }
     }
@@ -211,11 +213,6 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
             event.setCancelled(true);
             return;
         }
-        if (authRequired.contains(event.getPlayer().getUniqueId())) {
-            event.setCancelled(true);
-            return;
-        }
-        if (authRequired.contains(event.getPlayer().getUniqueId())) { event.setCancelled(true); return; }
         if (checking.contains(event.getPlayer().getUniqueId())) {
             event.setCancelled(true);
             return;
@@ -228,6 +225,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
 
     @EventHandler
     public void onChat(AsyncPlayerChatEvent event) {
+        if (authRequired.contains(event.getPlayer().getUniqueId())) { event.setCancelled(true); return; }
         if (checking.contains(event.getPlayer().getUniqueId())) {
             event.setCancelled(true);
             return;
@@ -240,6 +238,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
 
     @EventHandler
     public void onInventoryAction(InventoryClickEvent event) {
+        if (event.getWhoClicked() instanceof Player player && authRequired.contains(player.getUniqueId())) { event.setCancelled(true); return; }
         if (event.getWhoClicked() instanceof Player player && !checking.contains(player.getUniqueId())
                 && !allowAction(player.getUniqueId())) {
             event.setCancelled(true);
@@ -250,6 +249,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     @EventHandler
     public void onInteract(PlayerInteractEvent event) {
         Player player = event.getPlayer();
+        if (authRequired.contains(player.getUniqueId())) { event.setCancelled(true); return; }
         if (!checking.contains(player.getUniqueId()) && !allowAction(player.getUniqueId())) {
             event.setCancelled(true);
             recordViolation(player.getUniqueId(), "interaction-rate-limit");
@@ -259,6 +259,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     @EventHandler
     public void onBlockPlace(BlockPlaceEvent event) {
         UUID id = event.getPlayer().getUniqueId();
+        if (authRequired.contains(id)) { event.setCancelled(true); return; }
         if (checking.contains(id)) { event.setCancelled(true); return; }
         if (!allowAction(id)) { event.setCancelled(true); recordViolation(id, "block-place-rate-limit"); }
     }
