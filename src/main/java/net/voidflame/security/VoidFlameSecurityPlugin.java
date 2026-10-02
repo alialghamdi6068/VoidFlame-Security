@@ -684,6 +684,16 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         return m == null ? fallback : m;
     }
 
+    private void item(Inventory inventory, int slot, Material material, String name, String... lore) {
+        ItemStack stack = item(material, name);
+        ItemMeta meta = stack.getItemMeta();
+        if (meta != null && lore.length > 0) {
+            meta.setLore(Arrays.asList(lore));
+            stack.setItemMeta(meta);
+        }
+        inventory.setItem(slot, stack);
+    }
+
     private ItemStack item(Material material, String name) {
         ItemStack stack = new ItemStack(material);
         ItemMeta meta = stack.getItemMeta();
