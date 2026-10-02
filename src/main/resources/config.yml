@@ -81,6 +81,27 @@ anti-cheat:
     min-attack-interval-ms: 45
     flag-after-fast-attacks: 8
 
+authentication:
+  # In auto mode, local registration/login is enforced only when server.properties online-mode=false.
+  # Online-mode servers keep Mojang authentication and do not ask players for passwords.
+  enabled: true
+  mode: auto
+  password-min-length: 8
+  max-attempts: 5
+  pbkdf2-iterations: 210000
+  messages:
+    notice: "&7Local authentication is enabled for offline-mode servers."
+    register: "&5VoidFlame &7» &fRegister: &d/register <password> <confirm>"
+    login: "&5VoidFlame &7» &fLogin: &d/login <password>"
+    required: "&cYou must register or login before playing."
+    register-usage: "&cUsage: /register <password> <confirm>"
+    login-usage: "&cUsage: /login <password>"
+    invalid-password: "&cPassword contains unsupported characters."
+    registered: "&aRegistration successful. You are now authenticated."
+    invalid: "&cInvalid password."
+    logged-in: "&aLogin successful."
+    too-many-attempts: "&cToo many authentication attempts. Please reconnect later."
+
 # ================================================================
 # Advanced network / attack protection
 # ================================================================
