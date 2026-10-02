@@ -371,10 +371,10 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
                 long maxFailures = Math.max(1L, getConfig().getLong("authentication.max-attempts", 5L));
                 long nextFailures = failed + 1L;
                 long lockSeconds = Math.max(1L, getConfig().getLong("authentication.lock-seconds", 300L));
-                long lockedUntil = nextFailures >= maxFailures ? System.currentTimeMillis() + lockSeconds * 1000L : 0L;
+                long newLockedUntil = nextFailures >= maxFailures ? System.currentTimeMillis() + lockSeconds * 1000L : 0L;
                 storage.database().execute("UPDATE auth_accounts SET failed_attempts=?,locked_until=?,updated_at=? WHERE uuid=?",
-                        nextFailures, lockedUntil, System.currentTimeMillis(), player.getUniqueId().toString());
-                if (lockedUntil > 0L) {
+                        nextFailures, newLockedUntil, System.currentTimeMillis(), player.getUniqueId().toString());
+                if (newLockedUntil > 0L) {
                     player.kickPlayer(color(getConfig().getString("authentication.messages.too-many-attempts", "&cToo many authentication attempts. Please reconnect later.")));
                 } else {
                     player.sendMessage(color(getConfig().getString("authentication.messages.invalid", "&cInvalid password.")));
