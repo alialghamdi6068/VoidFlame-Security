@@ -9,6 +9,7 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
+import org.bukkit.event.player.PlayerCommandSendEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerLoginEvent;
@@ -85,6 +86,10 @@ public final class AdvancedProtectionListener implements Listener {
             if (mode.ordinal() >= Mode.HIGH.ordinal() || connectionCount > connectionLimit * 2) {
                 long blockSeconds = Math.max(5L, plugin.getConfig().getLong("blocking.ip-block-seconds", 60L));
                 blockedIps.put(ip, now + blockSeconds * 1000L);
+                if (subnet != null && !subnet.equals("unknown") && plugin.getConfig().getBoolean("blocking.block-subnet-on-correlation", true)) {
+                    long subnetSeconds = Math.max(blockSeconds, plugin.getConfig().getLong("blocking.subnet-block-seconds", 120L));
+                    blockedSubnets.put(subnet, now + subnetSeconds * 1000L);
+                }
                 event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, message("messages.join-flood", "Join flood protection is active."));
                 alert("Connection flood from " + ip + " (" + connectionCount + " connections, subnet=" + subnetCount + ")");
             }
@@ -129,15 +134,23 @@ public final class AdvancedProtectionListener implements Listener {
         window(ipJoins, ip).addAndCount(now, millis("antibot.join-window-seconds", 10));
         window(subnetJoins, subnet).addAndCount(now, millis("correlation.subnet-window-seconds", 10));
 
-        if (mode.ordinal() >= Mode.ELEVATED.ordinal() && !isTrusted(player)) {
-            trustedUntil.put(player.getUniqueId(), now + millis("verified-cache.temporary-trust-seconds", 120));
-        }
+        // A normal join must never become trusted merely because an attack is active.
+        // Trust is reserved for staff/bypass/verified identities.
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onCommand(PlayerCommandPreprocessEvent event) {
         if (!enabled() || trusted(event.getPlayer())) return;
         if (!allowBurst(event.getPlayer(), "command", "commands.max-per-second", 6)) event.setCancelled(true);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onCommandSend(PlayerCommandSendEvent event) {
+        if (!enabled() || trusted(event.getPlayer())) return;
+        // Do not expose command trees repeatedly during an active abuse burst.
+        if (!allowBurst(event.getPlayer(), "command-tree", "commands.max-tree-sends-per-second", 3)) {
+            event.getCommands().clear();
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
