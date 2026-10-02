@@ -48,6 +48,7 @@ public final class SecurityDetectionListener implements Listener {
                 || event.getTo() == null) return;
 
         Player player = event.getPlayer();
+        if (player.isOp() || player.hasPermission("voidflame.security.anticheat.bypass")) return;
         if (player.getGameMode() == GameMode.SPECTATOR
                 || player.getGameMode() == GameMode.CREATIVE
                 || player.isFlying()
@@ -94,6 +95,7 @@ public final class SecurityDetectionListener implements Listener {
         if (!plugin.getConfig().getBoolean("anti-cheat.enabled", true)
                 || !plugin.getConfig().getBoolean("anti-cheat.combat.enabled", true)) return;
         if (!(event.getDamager() instanceof Player attacker) || !(event.getEntity() instanceof Player target)) return;
+        if (attacker.isOp() || attacker.hasPermission("voidflame.security.anticheat.bypass")) return;
         if (attacker.getGameMode() == GameMode.SPECTATOR) return;
 
         double maxReach = Math.max(3.25D,
