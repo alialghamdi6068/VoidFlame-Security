@@ -82,7 +82,12 @@ public final class AdvancedProtectionListener implements Listener {
             int score = 2;
             if (connectionCount > connectionLimit * 2 || subnetCount > scaledLimit("correlation.critical-subnet-joins", 40)) score = 4;
             plugin.recordViolation(event.getUniqueId(), "connection-flood:" + score);
-            if (mode.ordinal() >= Mode.HIGH.ordinal() || connectionCount > connectionLimit * 2) {
+            boolean hardDenyBurst = plugin.getConfig().getBoolean("connection.hard-deny-on-burst", true);
+            boolean hardDenyHigh = plugin.getConfig().getBoolean("connection.hard-deny-on-high-mode", true);
+            boolean deny = (hardDenyBurst && (connectionCount > connectionLimit || joinCount >= burstLimit))
+                    || (hardDenyHigh && mode.ordinal() >= Mode.HIGH.ordinal())
+                    || connectionCount > connectionLimit * 2;
+            if (deny) {
                 long blockSeconds = Math.max(5L, plugin.getConfig().getLong("blocking.ip-block-seconds", 60L));
                 blockedIps.put(ip, now + blockSeconds * 1000L);
                 if (subnet != null && !subnet.equals("unknown") && plugin.getConfig().getBoolean("blocking.block-subnet-on-correlation", true)) {
@@ -94,14 +99,7 @@ public final class AdvancedProtectionListener implements Listener {
             }
         }
 
-        if (mode == Mode.LOCKDOWN && !plugin.isSecurityTrusted(event.getUniqueId())) {
-            int online = Bukkit.getOnlinePlayers().size();
-            int reserved = Math.max(0, plugin.getConfig().getInt("lockdown.reserved-trusted-slots", 5));
-            int maxPlayers = Bukkit.getMaxPlayers();
-            if (online >= Math.max(1, maxPlayers - reserved)) {
-                event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, message("messages.lockdown", "The server is under temporary security lockdown."));
-            }
-        }
+
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -116,8 +114,10 @@ public final class AdvancedProtectionListener implements Listener {
         }
 
         if (mode == Mode.LOCKDOWN && !plugin.isSecurityTrusted(event.getPlayer().getUniqueId())) {
+            boolean denyNewConnections = plugin.getConfig().getBoolean("lockdown.deny-new-connections", true);
             int reserved = Math.max(0, plugin.getConfig().getInt("lockdown.reserved-trusted-slots", 5));
-            if (Bukkit.getOnlinePlayers().size() >= Math.max(1, Bukkit.getMaxPlayers() - reserved)) {
+            boolean reservedFull = Bukkit.getOnlinePlayers().size() >= Math.max(1, Bukkit.getMaxPlayers() - reserved);
+            if (denyNewConnections || reservedFull) {
                 event.disallow(PlayerLoginEvent.Result.KICK_OTHER, message("messages.lockdown", "The server is under temporary security lockdown."));
             }
         }
