@@ -207,8 +207,6 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     @EventHandler
     public void onCommand(PlayerCommandPreprocessEvent event) {
         if (!enabled) return;
-        if (!enabled) return;
-        if (!enabled) return;
         if (authRequired.contains(event.getPlayer().getUniqueId())) {
             event.setCancelled(true);
             return;
