@@ -80,3 +80,67 @@ anti-cheat:
     max-reach: 4.25
     min-attack-interval-ms: 45
     flag-after-fast-attacks: 8
+
+# ================================================================
+# Advanced network / attack protection
+# ================================================================
+connection:
+  window-seconds: 10
+  max-per-ip: 12
+  max-burst-per-ip: 6
+
+correlation:
+  subnet-window-seconds: 10
+  active-subnet-threshold: 4
+  max-joins-per-subnet: 20
+  critical-subnet-joins: 40
+  critical-active-subnets: 3
+
+attack-mode:
+  # Automatic global escalation based on recent connections/joins and TPS.
+  elevated-joins: 4
+  high-joins: 10
+  critical-joins: 20
+  lockdown-joins: 35
+  tps-high: 16.0
+  tps-critical: 14.0
+
+blocking:
+  ip-block-seconds: 60
+  subnet-block-seconds: 120
+  # Reserved slots are protected for trusted/verified/staff players in lockdown.
+  trusted-slots-only: true
+
+verified-cache:
+  temporary-trust-seconds: 120
+
+packets:
+  # These are safe Bukkit/Paper-level payload guards. Raw Netty/NMS packet
+  # interception is intentionally not used because it is version-internal.
+  max-plugin-message-bytes: 32767
+  max-payloads-per-second: 30
+
+actions:
+  max-interact-per-second: 18
+  max-inventory-per-second: 18
+
+commands:
+  max-per-second: 6
+
+chat:
+  max-per-second: 5
+
+lockdown:
+  reserved-trusted-slots: 5
+
+alerts:
+  enabled: true
+  cooldown-seconds: 15
+  message-prefix: "§5[Security] §f"
+  # Leave empty to disable. Never commit a real webhook URL to GitHub.
+  discord-webhook: ""
+
+# Paper's public API does not expose a stable raw-Netty packet interception
+# contract. The plugin therefore implements connection/login/payload guards
+# through supported events instead of brittle NMS channel injection.
+\n
