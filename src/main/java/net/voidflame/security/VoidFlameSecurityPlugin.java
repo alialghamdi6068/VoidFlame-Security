@@ -24,6 +24,10 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
+import java.security.SecureRandom;
+import java.security.GeneralSecurityException;
 
 public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listener {
     private StorageService storage;
@@ -33,6 +37,9 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     private final Set<UUID> checking = ConcurrentHashMap.newKeySet();
     private final Set<UUID> verified = ConcurrentHashMap.newKeySet();
     private final Set<UUID> whitelist = ConcurrentHashMap.newKeySet();
+    private final Set<UUID> authenticated = ConcurrentHashMap.newKeySet();
+    private final Set<UUID> authRequired = ConcurrentHashMap.newKeySet();
+    private final ConcurrentHashMap<UUID, Integer> authAttempts = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Integer> captchaAttempts = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Long> captchaStarted = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Integer> riskScores = new ConcurrentHashMap<>();
@@ -52,6 +59,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
             return;
         }
         loadWhitelistAsync();
+        getServer().getPluginManager().registerEvents(new AuthListener(), this);
         getServer().getPluginManager().registerEvents(this, this);
         getServer().getPluginManager().registerEvents(new SecurityDetectionListener(this), this);
         getServer().getPluginManager().registerEvents(new AdvancedProtectionListener(this), this);
@@ -77,6 +85,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         UUID id = player.getUniqueId();
         long now = System.currentTimeMillis();
         joinTimes.put(id, now);
+        if (authEnabled() && !Bukkit.getOnlineMode()) prepareAuthentication(player);
 
         if (!enabled || bypassCaptcha(player)) return;
         long blocked = blockedUntil.getOrDefault(id, 0L);
@@ -200,6 +209,15 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         if (!enabled) return;
         if (!enabled) return;
         if (!enabled) return;
+        if (authRequired.contains(event.getPlayer().getUniqueId())) {
+            event.setCancelled(true);
+            return;
+        }
+        if (authRequired.contains(event.getPlayer().getUniqueId())) {
+            event.setCancelled(true);
+            return;
+        }
+        if (authRequired.contains(event.getPlayer().getUniqueId())) { event.setCancelled(true); return; }
         if (checking.contains(event.getPlayer().getUniqueId())) {
             event.setCancelled(true);
             return;
@@ -258,6 +276,9 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     public void onQuit(PlayerQuitEvent event) {
         UUID id = event.getPlayer().getUniqueId();
         actionWindows.remove(id);
+        authenticated.remove(id);
+        authRequired.remove(id);
+        authAttempts.remove(id);
         joinTimes.remove(id);
         riskScores.remove(id);
         blockedUntil.remove(id);
@@ -266,6 +287,128 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         captchaAttempts.remove(id);
         captchaStarted.remove(id);
         violationCooldowns.keySet().removeIf(key -> key.startsWith(id.toString() + "|"));
+    }
+
+    private boolean authEnabled() {
+        return getConfig().getBoolean("authentication.enabled", true);
+    }
+
+    private void prepareAuthentication(Player player) {
+        UUID id = player.getUniqueId();
+        storage.get("security", "auth:" + id).thenAccept(record -> Bukkit.getScheduler().runTask(this, () -> {
+            if (!player.isOnline() || !authEnabled() || Bukkit.getOnlineMode()) return;
+            authAttempts.put(id, 0);
+            authRequired.add(id);
+            if (record == null || record.isBlank()) {
+                player.sendMessage(color(getConfig().getString("authentication.messages.register", "&5VoidFlame &7» &fRegister with &d/register <password> <confirm>")));
+            } else {
+                player.sendMessage(color(getConfig().getString("authentication.messages.login", "&5VoidFlame &7» &fLogin with &d/login <password>")));
+            }
+        })).exceptionally(error -> { getLogger().warning("Authentication lookup failed: " + error.getMessage()); return null; });
+    }
+
+    private boolean handleAuthenticationCommand(Player player, String raw) {
+        if (!authEnabled() || Bukkit.getOnlineMode() || !authRequired.contains(player.getUniqueId())) return false;
+        String[] parts = raw.trim().split("\\s+");
+        if (parts.length == 0) return true;
+        String command = parts[0].toLowerCase(Locale.ROOT);
+        if (!command.equals("/register") && !command.equals("/login")) {
+            player.sendMessage(color(getConfig().getString("authentication.messages.required", "&cYou must authenticate before playing.")));
+            return true;
+        }
+        int maxAttempts = Math.max(1, getConfig().getInt("authentication.max-attempts", 5));
+        int attempts = authAttempts.getOrDefault(player.getUniqueId(), 0);
+        if (attempts >= maxAttempts) {
+            player.kickPlayer(color(getConfig().getString("authentication.messages.too-many-attempts", "&cToo many authentication attempts.")));
+            return true;
+        }
+        authAttempts.merge(player.getUniqueId(), 1, Integer::sum);
+        if (command.equals("/register")) {
+            if (parts.length != 3 || parts[1].length() < getConfig().getInt("authentication.password-min-length", 8)
+                    || !parts[1].equals(parts[2])) {
+                player.sendMessage(color(getConfig().getString("authentication.messages.register-usage", "&cUsage: /register <password> <confirm>")));
+                return true;
+            }
+            String password = parts[1];
+            if (!password.matches("[A-Za-z0-9!@#$%^&*()_+\\-=\\[\\]{};':\\\\\\\",.<>/?]+")) {
+                player.sendMessage(color(getConfig().getString("authentication.messages.invalid-password", "&cPassword contains unsupported characters.")));
+                return true;
+            }
+            storage.get("security", "auth:" + player.getUniqueId()).thenAccept(existing -> {
+                if (existing != null && !existing.isBlank()) {
+                    player.sendMessage(color("&cThis account is already registered. Use /login <password>."));
+                    return;
+                }
+                String encoded = hashPassword(password);
+                storage.put("security", "auth:" + player.getUniqueId(), encoded).thenRun(() -> Bukkit.getScheduler().runTask(this, () -> {
+                    authenticated.add(player.getUniqueId());
+                    authRequired.remove(player.getUniqueId());
+                    authAttempts.remove(player.getUniqueId());
+                    player.sendMessage(color(getConfig().getString("authentication.messages.registered", "&aRegistration successful.")));
+                }));
+            });
+            return true;
+        }
+        if (parts.length != 2) {
+            player.sendMessage(color(getConfig().getString("authentication.messages.login-usage", "&cUsage: /login <password>")));
+            return true;
+        }
+        storage.get("security", "auth:" + player.getUniqueId()).thenAccept(record -> Bukkit.getScheduler().runTask(this, () -> {
+            if (record == null || !verifyPassword(parts[1], record)) {
+                player.sendMessage(color(getConfig().getString("authentication.messages.invalid", "&cInvalid password.")));
+                return;
+            }
+            authenticated.add(player.getUniqueId());
+            authRequired.remove(player.getUniqueId());
+            authAttempts.remove(player.getUniqueId());
+            player.sendMessage(color(getConfig().getString("authentication.messages.logged-in", "&aLogin successful.")));
+        }));
+        return true;
+    }
+
+    private String hashPassword(String password) {
+        try {
+            int iterations = Math.max(120_000, getConfig().getInt("authentication.pbkdf2-iterations", 210_000));
+            byte[] salt = new byte[16];
+            new SecureRandom().nextBytes(salt);
+            PBEKeySpec spec = new PBEKeySpec(password.toCharArray(), salt, iterations, 256);
+            byte[] hash = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded();
+            return iterations + ":" + Base64.getEncoder().encodeToString(salt) + ":" + Base64.getEncoder().encodeToString(hash);
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("Unable to hash authentication password.", e);
+        }
+    }
+
+    private boolean verifyPassword(String password, String encoded) {
+        try {
+            String[] parts = encoded.split(":", -1);
+            if (parts.length != 3) return false;
+            int iterations = Integer.parseInt(parts[0]);
+            byte[] salt = Base64.getDecoder().decode(parts[1]);
+            byte[] expected = Base64.getDecoder().decode(parts[2]);
+            PBEKeySpec spec = new PBEKeySpec(password.toCharArray(), salt, iterations, expected.length * 8);
+            byte[] actual = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded();
+            return java.security.MessageDigest.isEqual(expected, actual);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private String color(String message) {
+        return org.bukkit.ChatColor.translateAlternateColorCodes('&', message == null ? "" : message);
+    }
+
+    private final class AuthListener implements Listener {
+        @EventHandler
+        public void onCommandPreprocess(PlayerCommandPreprocessEvent event) {
+            if (handleAuthenticationCommand(event.getPlayer(), event.getMessage())) event.setCancelled(true);
+        }
+
+        @EventHandler
+        public void onJoinAuth(PlayerJoinEvent event) {
+            if (!authEnabled() || Bukkit.getOnlineMode()) return;
+            event.getPlayer().sendMessage(color(getConfig().getString("authentication.messages.notice", "&7Authentication is required on offline-mode servers.")));
+        }
     }
 
     public boolean isSecurityTrusted(UUID id) {
