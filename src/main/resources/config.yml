@@ -88,6 +88,7 @@ authentication:
   mode: auto
   password-min-length: 8
   max-attempts: 5
+  lock-seconds: 300
   pbkdf2-iterations: 210000
   messages:
     notice: "&7Local authentication is enabled for offline-mode servers."
