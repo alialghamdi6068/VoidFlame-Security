@@ -63,3 +63,20 @@ whitelist:
   bypass-captcha: true
   bypass-rate-limits: true
   bypass-new-account-protection: true
+
+# Conservative server-side anomaly detection. These checks flag repeated
+# impossible patterns and feed the existing risk/escalation system.
+anti-cheat:
+  enabled: true
+  movement:
+    enabled: true
+    max-horizontal-per-event: 1.25
+    max-vertical-per-event: 2.25
+    flag-after: 4
+    velocity-grace-ms: 750
+    teleport-grace-ms: 1500
+  combat:
+    enabled: true
+    max-reach: 4.25
+    min-attack-interval-ms: 45
+    flag-after-fast-attacks: 8
