@@ -90,7 +90,7 @@ public final class AdvancedProtectionListener implements Listener {
             }
         }
 
-        if (mode == Mode.LOCKDOWN && !isTrustedUuid(event.getUniqueId())) {
+        if (mode == Mode.LOCKDOWN && !plugin.isSecurityTrusted(event.getUniqueId())) {
             int online = Bukkit.getOnlinePlayers().size();
             int reserved = Math.max(0, plugin.getConfig().getInt("lockdown.reserved-trusted-slots", 5));
             int maxPlayers = Bukkit.getMaxPlayers();
@@ -111,7 +111,7 @@ public final class AdvancedProtectionListener implements Listener {
             return;
         }
 
-        if (mode == Mode.LOCKDOWN && !isTrusted(event.getPlayer())) {
+        if (mode == Mode.LOCKDOWN && !plugin.isSecurityTrusted(event.getPlayer().getUniqueId())) {
             int reserved = Math.max(0, plugin.getConfig().getInt("lockdown.reserved-trusted-slots", 5));
             if (Bukkit.getOnlinePlayers().size() >= Math.max(1, Bukkit.getMaxPlayers() - reserved)) {
                 event.disallow(PlayerLoginEvent.Result.KICK_OTHER, message("messages.lockdown", "The server is under temporary security lockdown."));
