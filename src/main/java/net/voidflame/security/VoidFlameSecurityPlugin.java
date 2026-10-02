@@ -381,9 +381,18 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
             }
             String record = String.valueOf(row.get("password_hash"));
             if (!verifyPassword(parts[1], record)) {
-                storage.database().execute("UPDATE auth_accounts SET failed_attempts=failed_attempts+1,updated_at=? WHERE uuid=?",
-                        System.currentTimeMillis(), player.getUniqueId().toString());
-                player.sendMessage(color(getConfig().getString("authentication.messages.invalid", "&cInvalid password.")));
+                long failed = row.get("failed_attempts") instanceof Number n ? n.longValue() : 0L;
+                long maxFailures = Math.max(1L, getConfig().getLong("authentication.max-attempts", 5L));
+                long nextFailures = failed + 1L;
+                long lockSeconds = Math.max(1L, getConfig().getLong("authentication.lock-seconds", 300L));
+                long lockedUntil = nextFailures >= maxFailures ? System.currentTimeMillis() + lockSeconds * 1000L : 0L;
+                storage.database().execute("UPDATE auth_accounts SET failed_attempts=?,locked_until=?,updated_at=? WHERE uuid=?",
+                        nextFailures, lockedUntil, System.currentTimeMillis(), player.getUniqueId().toString());
+                if (lockedUntil > 0L) {
+                    player.kickPlayer(color(getConfig().getString("authentication.messages.too-many-attempts", "&cToo many authentication attempts. Please reconnect later.")));
+                } else {
+                    player.sendMessage(color(getConfig().getString("authentication.messages.invalid", "&cInvalid password.")));
+                }
                 return;
             }
             storage.database().execute("UPDATE auth_accounts SET failed_attempts=0,locked_until=0,updated_at=? WHERE uuid=?",
