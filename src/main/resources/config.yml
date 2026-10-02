@@ -106,9 +106,12 @@ authentication:
 # Advanced network / attack protection
 # ================================================================
 connection:
+  # Per-IP connection admission control.
   window-seconds: 10
-  max-per-ip: 12
-  max-burst-per-ip: 6
+  max-per-ip: 8
+  max-burst-per-ip: 4
+  hard-deny-on-burst: true
+  hard-deny-on-high-mode: true
 
 correlation:
   subnet-window-seconds: 10
@@ -127,8 +130,9 @@ attack-mode:
   tps-critical: 14.0
 
 blocking:
-  ip-block-seconds: 60
-  subnet-block-seconds: 120
+  ip-block-seconds: 300
+  subnet-block-seconds: 600
+  block-subnet-on-correlation: true
   # Reserved slots are protected for trusted/verified/staff players in lockdown.
   trusted-slots-only: true
 
@@ -147,12 +151,15 @@ actions:
 
 commands:
   max-per-second: 6
+  max-tree-sends-per-second: 3
 
 chat:
   max-per-second: 5
 
 lockdown:
   reserved-trusted-slots: 5
+  deny-new-connections: true
+  require-trusted-identity: true
 
 alerts:
   enabled: true
