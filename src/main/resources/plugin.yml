@@ -30,3 +30,6 @@ permissions:
   voidflame.security.admin:
     description: Full Security administration.
     default: op
+  voidflame.security.anticheat.bypass:
+    description: Bypass VoidFlame anti-cheat detection for trusted staff/testing.
+    default: false
