@@ -536,7 +536,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
             case "on" -> { enabled = true; getConfig().set("settings.enabled", true); saveConfig(); sender.sendMessage("§aAntiBot enabled."); }
             case "off" -> { enabled = false; getConfig().set("settings.enabled", false); saveConfig(); checking.forEach(id -> { Player p=Bukkit.getPlayer(id); if(p!=null) p.closeInventory(); }); checking.clear(); captchaSlots.clear(); sender.sendMessage("§cAntiBot disabled."); }
             case "whitelist" -> handleWhitelist(sender, args);
-            case "gui" -> { if (sender instanceof Player player) openWhitelistGui(player); }
+            case "gui" -> { if (sender instanceof Player player) openSecurityGui(player); }
             default -> sender.sendMessage("§cUsage: /antibot <on|off|status|whitelist add|remove <player>|gui>");
         }
         return true;
@@ -562,6 +562,41 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         return List.of();
     }
 
+    private static final String SECURITY_GUI = "§8VoidFlame §5• §dSecurity";
+
+    private void openSecurityGui(Player viewer) {
+        Inventory inv = Bukkit.createInventory(null, 54, SECURITY_GUI);
+        ItemStack filler = item(Material.BLACK_STAINED_GLASS_PANE, " ");
+        ItemStack accent = item(Material.PURPLE_STAINED_GLASS_PANE, " ");
+        for (int i=0;i<54;i++) inv.setItem(i, filler.clone());
+        for (int i=0;i<9;i++) inv.setItem(i, accent.clone());
+        for (int i=45;i<54;i++) inv.setItem(i, accent.clone());
+        item(inv, 4, Material.SHIELD, "§5§lSECURITY CONTROL CENTER",
+                "§7AntiBot • CAPTCHA • Rate Limits",
+                "§7Attack protection • Authentication");
+        item(inv, 20, enabled ? Material.LIME_DYE : Material.RED_DYE,
+                enabled ? "§a§lPROTECTION ONLINE" : "§c§lPROTECTION OFFLINE",
+                "§7Current protection level: §f" + protectionLevel,
+                "§7Verifying: §f" + checking.size());
+        item(inv, 22, Material.ENDER_EYE, "§b§lATTACK PROTECTION",
+                "§7Connection and subnet correlation",
+                "§7Automatic escalation is active");
+        item(inv, 24, Material.NAME_TAG, "§e§lAUTHENTICATION",
+                "§7Offline-mode registration/login",
+                "§7PBKDF2 password hashing");
+        item(inv, 30, Material.LIME_DYE, "§a§lWHITELIST",
+                "§7Manage trusted identities",
+                "§eClick §8» §fOpen");
+        item(inv, 32, Material.REDSTONE, "§c§lLOCKDOWN",
+                "§7Emergency admission controls",
+                "§8Configured thresholds are automatic");
+        item(inv, 40, Material.BOOK, "§7§lAUDIT",
+                "§7Security violations are persisted",
+                "§7through VoidFlame-Core");
+        item(inv, 49, Material.BARRIER, "§c§lCLOSE");
+        viewer.openInventory(inv);
+    }
+
     private void openWhitelistGui(Player viewer) {
         int size = Math.max(9, Math.min(54, getConfig().getInt("settings.whitelist-gui-size", 54)));
         size -= size % 9;
@@ -578,6 +613,15 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
             inv.setItem(i, item(active ? enabled : disabled, (active ? enabledName : disabledName).replace("<player>", target.getName())));
         }
         viewer.openInventory(inv);
+    }
+
+    @EventHandler
+    public void onSecurityGuiClick(InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player viewer)) return;
+        if (!event.getView().getTitle().equals(SECURITY_GUI)) return;
+        event.setCancelled(true);
+        if (event.getRawSlot() == 30) openWhitelistGui(viewer);
+        else if (event.getRawSlot() == 49) viewer.closeInventory();
     }
 
     @EventHandler
