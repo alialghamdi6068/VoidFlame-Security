@@ -43,7 +43,7 @@ public final class AdvancedProtectionListener implements Listener {
     private final Map<String, Window> ipJoins = new ConcurrentHashMap<>();
     private final Map<String, Window> subnetJoins = new ConcurrentHashMap<>();
     private final Map<String, Window> ipConnections = new ConcurrentHashMap<>();
-    private final Map<UUID, Window> playerBursts = new ConcurrentHashMap<>();
+    private final Map<String, Window> playerBursts = new ConcurrentHashMap<>();
     private final Map<String, Long> blockedIps = new ConcurrentHashMap<>();
     private final Map<String, Long> blockedSubnets = new ConcurrentHashMap<>();
     private final Map<UUID, Long> trustedUntil = new ConcurrentHashMap<>();
@@ -172,12 +172,13 @@ public final class AdvancedProtectionListener implements Listener {
 
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
-        playerBursts.remove(event.getPlayer().getUniqueId());
+        String prefix = event.getPlayer().getUniqueId() + "|";
+        playerBursts.keySet().removeIf(key -> key.startsWith(prefix));
         trustedUntil.remove(event.getPlayer().getUniqueId());
     }
 
     private boolean allowBurst(Player player, String type, String path, int fallback) {
-        Window w = playerBursts.computeIfAbsent(player.getUniqueId(), ignored -> new Window());
+        Window w = playerBursts.computeIfAbsent(player.getUniqueId() + "|" + type, ignored -> new Window());
         int limit = scaledLimit(path, fallback);
         int count = w.addAndCount(System.currentTimeMillis(), 1000L);
         if (count <= limit) return true;
