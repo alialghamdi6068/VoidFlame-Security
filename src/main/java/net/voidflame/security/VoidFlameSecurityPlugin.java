@@ -294,16 +294,22 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
 
     private void prepareAuthentication(Player player) {
         UUID id = player.getUniqueId();
-        storage.get("security", "auth:" + id).thenAccept(record -> Bukkit.getScheduler().runTask(this, () -> {
-            if (!player.isOnline() || !authEnabled() || Bukkit.getOnlineMode()) return;
-            authAttempts.put(id, 0);
-            authRequired.add(id);
-            if (record == null || record.isBlank()) {
-                player.sendMessage(color(getConfig().getString("authentication.messages.register", "&5VoidFlame &7» &fRegister with &d/register <password> <confirm>")));
-            } else {
-                player.sendMessage(color(getConfig().getString("authentication.messages.login", "&5VoidFlame &7» &fLogin with &d/login <password>")));
-            }
-        })).exceptionally(error -> { getLogger().warning("Authentication lookup failed: " + error.getMessage()); return null; });
+        storage.database().query("SELECT password_hash FROM auth_accounts WHERE uuid=?", id.toString())
+                .thenAccept(rows -> Bukkit.getScheduler().runTask(this, () -> {
+                    if (!player.isOnline() || !authEnabled() || Bukkit.getOnlineMode()) return;
+                    authAttempts.put(id, 0);
+                    authRequired.add(id);
+                    boolean registered = !rows.isEmpty()
+                            && rows.get(0).get("password_hash") != null
+                            && !String.valueOf(rows.get(0).get("password_hash")).isBlank();
+                    player.sendMessage(color(getConfig().getString(
+                            registered ? "authentication.messages.login" : "authentication.messages.register",
+                            registered ? "&5VoidFlame &7» &fLogin with &d/login <password>"
+                                       : "&5VoidFlame &7» &fRegister with &d/register <password> <confirm>")));
+                })).exceptionally(error -> {
+                    getLogger().warning("Authentication lookup failed: " + error.getMessage());
+                    return null;
+                });
     }
 
     private boolean handleAuthenticationCommand(Player player, String raw) {
@@ -333,35 +339,63 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
                 player.sendMessage(color(getConfig().getString("authentication.messages.invalid-password", "&cPassword contains unsupported characters.")));
                 return true;
             }
-            storage.get("security", "auth:" + player.getUniqueId()).thenAccept(existing -> {
-                if (existing != null && !existing.isBlank()) {
-                    player.sendMessage(color("&cThis account is already registered. Use /login <password>."));
-                    return;
-                }
-                String encoded = hashPassword(password);
-                storage.put("security", "auth:" + player.getUniqueId(), encoded).thenRun(() -> Bukkit.getScheduler().runTask(this, () -> {
-                    authenticated.add(player.getUniqueId());
-                    authRequired.remove(player.getUniqueId());
-                    authAttempts.remove(player.getUniqueId());
-                    player.sendMessage(color(getConfig().getString("authentication.messages.registered", "&aRegistration successful.")));
-                }));
-            });
+            storage.database().query("SELECT password_hash FROM auth_accounts WHERE uuid=?", player.getUniqueId().toString())
+                    .thenCompose(rows -> {
+                        if (!rows.isEmpty() && rows.get(0).get("password_hash") != null
+                                && !String.valueOf(rows.get(0).get("password_hash")).isBlank()) {
+                            player.sendMessage(color("&cThis account is already registered. Use /login <password>."));
+                            return CompletableFuture.completedFuture(null);
+                        }
+                        String encoded = hashPassword(password);
+                        long now = System.currentTimeMillis();
+                        return storage.database().execute(
+                                "INSERT INTO auth_accounts(uuid,password_hash,created_at,updated_at,failed_attempts,locked_until) VALUES(?,?,?, ?,0,0)",
+                                player.getUniqueId().toString(), encoded, now, now);
+                    }).thenRun(() -> Bukkit.getScheduler().runTask(this, () -> {
+                        if (!player.isOnline()) return;
+                        authenticated.add(player.getUniqueId());
+                        authRequired.remove(player.getUniqueId());
+                        authAttempts.remove(player.getUniqueId());
+                        player.sendMessage(color(getConfig().getString("authentication.messages.registered", "&aRegistration successful.")));
+                    })).exceptionally(error -> {
+                        getLogger().warning("Authentication registration failed: " + error.getMessage());
+                        return null;
+                    });
             return true;
         }
         if (parts.length != 2) {
             player.sendMessage(color(getConfig().getString("authentication.messages.login-usage", "&cUsage: /login <password>")));
             return true;
         }
-        storage.get("security", "auth:" + player.getUniqueId()).thenAccept(record -> Bukkit.getScheduler().runTask(this, () -> {
-            if (record == null || !verifyPassword(parts[1], record)) {
+        storage.database().query("SELECT password_hash,failed_attempts,locked_until FROM auth_accounts WHERE uuid=?",
+                player.getUniqueId().toString()).thenAccept(rows -> Bukkit.getScheduler().runTask(this, () -> {
+            if (rows.isEmpty()) {
                 player.sendMessage(color(getConfig().getString("authentication.messages.invalid", "&cInvalid password.")));
                 return;
             }
+            Map<String,Object> row = rows.get(0);
+            long lockedUntil = row.get("locked_until") instanceof Number n ? n.longValue() : 0L;
+            if (lockedUntil > System.currentTimeMillis()) {
+                player.kickPlayer(color(getConfig().getString("authentication.messages.too-many-attempts", "&cToo many authentication attempts.")));
+                return;
+            }
+            String record = String.valueOf(row.get("password_hash"));
+            if (!verifyPassword(parts[1], record)) {
+                storage.database().execute("UPDATE auth_accounts SET failed_attempts=failed_attempts+1,updated_at=? WHERE uuid=?",
+                        System.currentTimeMillis(), player.getUniqueId().toString());
+                player.sendMessage(color(getConfig().getString("authentication.messages.invalid", "&cInvalid password.")));
+                return;
+            }
+            storage.database().execute("UPDATE auth_accounts SET failed_attempts=0,locked_until=0,updated_at=? WHERE uuid=?",
+                    System.currentTimeMillis(), player.getUniqueId().toString());
             authenticated.add(player.getUniqueId());
             authRequired.remove(player.getUniqueId());
             authAttempts.remove(player.getUniqueId());
             player.sendMessage(color(getConfig().getString("authentication.messages.logged-in", "&aLogin successful.")));
-        }));
+        })).exceptionally(error -> {
+            getLogger().warning("Authentication login lookup failed: " + error.getMessage());
+            return null;
+        });
         return true;
     }
 
