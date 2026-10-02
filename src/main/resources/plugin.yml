@@ -13,6 +13,12 @@ commands:
     description: Manage VoidFlame AntiBot protection.
     usage: /antibot <on|off|status|whitelist>
     permission: voidflame.security.manage
+  register:
+    description: Register a local account on offline-mode servers.
+    usage: /register <password> <confirm>
+  login:
+    description: Authenticate a local account on offline-mode servers.
+    usage: /login <password>
 
 permissions:
   voidflame.security.manage:
