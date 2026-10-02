@@ -14,7 +14,6 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerLoginEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.event.player.PluginMessageReceivedEvent;
 
 import java.net.InetAddress;
 import java.util.ArrayDeque;
@@ -171,18 +170,6 @@ public final class AdvancedProtectionListener implements Listener {
         if (!allowBurst(player, "inventory", "actions.max-inventory-per-second", 18)) event.setCancelled(true);
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST)
-    public void onPluginMessage(PluginMessageReceivedEvent event) {
-        if (!enabled() || !(event.getPlayer() instanceof Player player) || trusted(player)) return;
-        byte[] data = event.getData();
-        int maxBytes = scaledLimit("packets.max-plugin-message-bytes", 32767);
-        if (data != null && data.length > maxBytes) {
-            event.setCancelled(true);
-            plugin.recordViolation(player.getUniqueId(), "oversized-plugin-payload:" + data.length);
-        }
-        if (!allowBurst(player, "payload", "packets.max-payloads-per-second", 30)) event.setCancelled(true);
-    }
-
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         playerBursts.remove(event.getPlayer().getUniqueId());
@@ -227,7 +214,7 @@ public final class AdvancedProtectionListener implements Listener {
         double tpsCritical = plugin.getConfig().getDouble("attack-mode.tps-critical", 14.0D);
         double tpsHigh = plugin.getConfig().getDouble("attack-mode.tps-high", 16.0D);
         if (tps <= tpsCritical && next.ordinal() < Mode.CRITICAL.ordinal()) next = Mode.CRITICAL;
-        else if (tps <= tpsHigh && next.ordinal() < Mode.HIGH) next = Mode.HIGH;
+        else if (tps <= tpsHigh && next.ordinal() < Mode.HIGH.ordinal()) next = Mode.HIGH;
 
         if (subnets >= plugin.getConfig().getInt("correlation.critical-active-subnets", 3)
                 && next.ordinal() < Mode.CRITICAL.ordinal()) next = Mode.CRITICAL;
