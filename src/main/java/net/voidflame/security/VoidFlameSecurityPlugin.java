@@ -225,35 +225,21 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
 
     @EventHandler
     public void onChat(AsyncPlayerChatEvent event) {
-        if (authRequired.contains(event.getPlayer().getUniqueId())) { event.setCancelled(true); return; }
-        if (checking.contains(event.getPlayer().getUniqueId())) {
-            event.setCancelled(true);
-            return;
-        }
-        if (!allowAction(event.getPlayer().getUniqueId())) {
-            event.setCancelled(true);
-            recordViolation(event.getPlayer().getUniqueId(), "chat-rate-limit");
-        }
+        UUID id = event.getPlayer().getUniqueId();
+        if (authRequired.contains(id) || checking.contains(id)) event.setCancelled(true);
     }
 
     @EventHandler
     public void onInventoryAction(InventoryClickEvent event) {
-        if (event.getWhoClicked() instanceof Player player && authRequired.contains(player.getUniqueId())) { event.setCancelled(true); return; }
-        if (event.getWhoClicked() instanceof Player player && !checking.contains(player.getUniqueId())
-                && !allowAction(player.getUniqueId())) {
+        if (event.getWhoClicked() instanceof Player player && (authRequired.contains(player.getUniqueId()) || checking.contains(player.getUniqueId()))) {
             event.setCancelled(true);
-            recordViolation(player.getUniqueId(), "inventory-rate-limit");
         }
     }
 
     @EventHandler
     public void onInteract(PlayerInteractEvent event) {
-        Player player = event.getPlayer();
-        if (authRequired.contains(player.getUniqueId())) { event.setCancelled(true); return; }
-        if (!checking.contains(player.getUniqueId()) && !allowAction(player.getUniqueId())) {
-            event.setCancelled(true);
-            recordViolation(player.getUniqueId(), "interaction-rate-limit");
-        }
+        UUID id = event.getPlayer().getUniqueId();
+        if (authRequired.contains(id) || checking.contains(id)) event.setCancelled(true);
     }
 
     @EventHandler
