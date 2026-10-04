@@ -19,6 +19,11 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.WorldCreator;
+import org.bukkit.World;
+import org.bukkit.generator.ChunkGenerator;
+import org.bukkit.generator.WorldInfo;
+import org.bukkit.generator.ChunkGenerator.ChunkData;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -48,6 +53,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     private volatile int protectionLevel = 0;
     private volatile boolean enabled;
     private AuditLogService auditLogs;
+    private World authWorld;
 
     @Override
     public void onEnable() {
@@ -59,6 +65,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
             return;
         }
         loadWhitelistAsync();
+        prepareAuthWorld();
         getServer().getPluginManager().registerEvents(new AuthListener(), this);
         getServer().getPluginManager().registerEvents(this, this);
         getServer().getPluginManager().registerEvents(new SecurityDetectionListener(this), this);
@@ -278,6 +285,44 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         return getConfig().getBoolean("authentication.enabled", true);
     }
 
+    private void prepareAuthWorld() {
+        if (!getConfig().getBoolean("authentication.void-world.enabled", true)) return;
+        String name = getConfig().getString("authentication.void-world.name", "VoidFlame-Auth");
+        authWorld = Bukkit.getWorld(name);
+        if (authWorld != null) return;
+        WorldCreator creator = new WorldCreator(name);
+        creator.generator(new ChunkGenerator() {
+            @Override
+            public ChunkData generateChunkData(WorldInfo worldInfo, java.util.Random random, int chunkX, int chunkZ, BiomeGrid biome) {
+                return createChunkData(worldInfo);
+            }
+        });
+        authWorld = creator.createWorld();
+        if (authWorld != null) {
+            authWorld.setAutoSave(false);
+            authWorld.setGameRule(org.bukkit.GameRule.DO_DAYLIGHT_CYCLE, false);
+            authWorld.setGameRule(org.bukkit.GameRule.DO_WEATHER_CYCLE, false);
+            authWorld.setTime(6000L);
+            authWorld.setStorm(false);
+        }
+    }
+
+    private void isolateForAuthentication(Player player) {
+        if (authWorld == null) prepareAuthWorld();
+        if (authWorld == null) return;
+        org.bukkit.Location location = new org.bukkit.Location(authWorld, 0.5, 100.0, 0.5, 0f, 0f);
+        player.setGameMode(org.bukkit.GameMode.ADVENTURE);
+        player.setInvulnerable(true);
+        player.teleportAsync(location);
+    }
+
+    private void releaseAuthentication(Player player) {
+        player.setInvulnerable(false);
+        String worldName = getConfig().getString("authentication.release-world", "world");
+        World world = Bukkit.getWorld(worldName);
+        if (world != null) player.teleportAsync(world.getSpawnLocation());
+    }
+
     private void prepareAuthentication(Player player) {
         UUID id = player.getUniqueId();
         storage.database().query("SELECT password_hash FROM auth_accounts WHERE uuid=?", id.toString())
@@ -285,6 +330,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
                     if (!player.isOnline() || !authEnabled() || Bukkit.getOnlineMode()) return;
                     authAttempts.put(id, 0);
                     authRequired.add(id);
+                    isolateForAuthentication(player);
                     boolean registered = !rows.isEmpty()
                             && rows.get(0).get("password_hash") != null
                             && !String.valueOf(rows.get(0).get("password_hash")).isBlank();
@@ -342,6 +388,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
                         authenticated.add(player.getUniqueId());
                         authRequired.remove(player.getUniqueId());
                         authAttempts.remove(player.getUniqueId());
+                        releaseAuthentication(player);
                         player.sendMessage(color(getConfig().getString("authentication.messages.registered", "&aRegistration successful.")));
                     })).exceptionally(error -> {
                         getLogger().warning("Authentication registration failed: " + error.getMessage());
@@ -386,6 +433,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
             authenticated.add(player.getUniqueId());
             authRequired.remove(player.getUniqueId());
             authAttempts.remove(player.getUniqueId());
+            releaseAuthentication(player);
             player.sendMessage(color(getConfig().getString("authentication.messages.logged-in", "&aLogin successful.")));
         })).exceptionally(error -> {
             getLogger().warning("Authentication login lookup failed: " + error.getMessage());
