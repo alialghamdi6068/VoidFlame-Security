@@ -90,6 +90,11 @@ authentication:
   max-attempts: 5
   lock-seconds: 300
   pbkdf2-iterations: 210000
+  # Unauthenticated players are isolated in a generated empty world until login/register succeeds.
+  void-world:
+    enabled: true
+    name: "VoidFlame-Auth"
+  release-world: "world"
   messages:
     notice: "&7Local authentication is enabled for offline-mode servers."
     register: "&5VoidFlame &7» &fRegister: &d/register <password> <confirm>"
