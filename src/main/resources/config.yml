@@ -5,6 +5,7 @@
 # Anti-bot, CAPTCHA, rate limits, escalation and whitelist controls.
 settings:
   enabled: true
+  lockdown: false
   module: security
   max-actions-per-second: 8
   violation-window-seconds: 10
