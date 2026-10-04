@@ -511,6 +511,15 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     public int getVerifyingCount() { return checking.size(); }
     public int getWhitelistSize() { return whitelist.size(); }
     public int getRiskCount() { return riskScores.size(); }
+    public int getMaxActionsPerSecond() { return getConfig().getInt("settings.max-actions-per-second", 8); }
+    public void setMaxActionsPerSecond(int value) { int v=Math.max(1,Math.min(100,value)); getConfig().set("settings.max-actions-per-second",v); saveConfig(); }
+    public int getJoinThreshold() { return getConfig().getInt("antibot.join-threshold", 4); }
+    public void setJoinThreshold(int value) { int v=Math.max(1,Math.min(100,value)); getConfig().set("antibot.join-threshold",v); saveConfig(); }
+    public int getVerifyScore() { return getConfig().getInt("escalation.verify-score", 5); }
+    public void setVerifyScore(int value) { int v=Math.max(1,Math.min(100,value)); getConfig().set("escalation.verify-score",v); saveConfig(); }
+    public int getBlockScore() { return getConfig().getInt("escalation.block-score", 20); }
+    public void setBlockScore(int value) { int v=Math.max(1,Math.min(200,value)); getConfig().set("escalation.block-score",v); saveConfig(); }
+
 
     private String color(String message) {
         return org.bukkit.ChatColor.translateAlternateColorCodes('&', message == null ? "" : message);
