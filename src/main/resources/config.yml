@@ -40,6 +40,7 @@ captcha:
   filler-name: "§7Verification"
 
 messages:
+  lockdown: "&cThe server is temporarily locked down by security protection."
   verified: "§a✓ Verification successful."
   failed: "§cVerification failed."
   timeout: "§cVerification timed out."
