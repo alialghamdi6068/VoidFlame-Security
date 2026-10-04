@@ -24,6 +24,7 @@ import org.bukkit.World;
 import org.bukkit.generator.ChunkGenerator;
 import org.bukkit.generator.WorldInfo;
 import org.bukkit.generator.ChunkGenerator.ChunkData;
+import org.bukkit.generator.ChunkGenerator.BiomeGrid;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -294,7 +295,8 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         creator.generator(new ChunkGenerator() {
             @Override
             public ChunkData generateChunkData(WorldInfo worldInfo, java.util.Random random, int chunkX, int chunkZ, BiomeGrid biome) {
-                return createChunkData(worldInfo);
+                World world = Bukkit.getWorld(worldInfo.getName());
+                return world == null ? null : createChunkData(world);
             }
         });
         authWorld = creator.createWorld();
