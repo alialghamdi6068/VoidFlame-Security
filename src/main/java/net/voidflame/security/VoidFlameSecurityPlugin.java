@@ -53,6 +53,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     private final ConcurrentHashMap<String, Long> violationCooldowns = new ConcurrentHashMap<>();
     private volatile int protectionLevel = 0;
     private volatile boolean enabled;
+    private volatile boolean lockdown;
     private AuditLogService auditLogs;
     private World authWorld;
 
@@ -60,6 +61,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     public void onEnable() {
         saveDefaultConfig();
         enabled = getConfig().getBoolean("settings.enabled", true);
+        lockdown = getConfig().getBoolean("settings.lockdown", false);
         if (!connectStorage()) {
             getLogger().severe("VoidFlame-Core storage service is unavailable.");
             getServer().getPluginManager().disablePlugin(this);
@@ -95,6 +97,10 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         joinTimes.put(id, now);
         if (authEnabled() && !Bukkit.getOnlineMode()) prepareAuthentication(player);
 
+        if (lockdown && !isSecurityTrusted(id)) {
+            player.kickPlayer(color(getConfig().getString("messages.lockdown", "&cThe server is temporarily locked down by security protection.")));
+            return;
+        }
         if (!enabled || bypassCaptcha(player)) return;
         long blocked = blockedUntil.getOrDefault(id, 0L);
         if (blocked > now) {
@@ -472,6 +478,41 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         }
     }
 
+    public boolean isProtectionEnabled() { return enabled; }
+
+    public void setProtectionEnabled(boolean value) {
+        enabled = value;
+        getConfig().set("settings.enabled", value);
+        saveConfig();
+        if (!value) {
+            checking.forEach(id -> { Player player = Bukkit.getPlayer(id); if (player != null) player.closeInventory(); });
+            checking.clear();
+            captchaSlots.clear();
+            captchaAttempts.clear();
+            captchaStarted.clear();
+        }
+    }
+
+    public boolean isLockdown() { return lockdown; }
+
+    public void setLockdown(boolean value) {
+        lockdown = value;
+        getConfig().set("settings.lockdown", value);
+        saveConfig();
+        if (value) {
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                if (!isSecurityTrusted(player.getUniqueId())) {
+                    player.kickPlayer(color(getConfig().getString("messages.lockdown", "&cThe server is temporarily locked down by security protection.")));
+                }
+            }
+        }
+    }
+
+    public int getProtectionLevel() { return protectionLevel; }
+    public int getVerifyingCount() { return checking.size(); }
+    public int getWhitelistSize() { return whitelist.size(); }
+    public int getRiskCount() { return riskScores.size(); }
+
     private String color(String message) {
         return org.bukkit.ChatColor.translateAlternateColorCodes('&', message == null ? "" : message);
     }
@@ -612,8 +653,8 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
             return true;
         }
         switch (args[0].toLowerCase(Locale.ROOT)) {
-            case "on" -> { enabled = true; getConfig().set("settings.enabled", true); saveConfig(); sender.sendMessage("§aAntiBot enabled."); }
-            case "off" -> { enabled = false; getConfig().set("settings.enabled", false); saveConfig(); checking.forEach(id -> { Player p=Bukkit.getPlayer(id); if(p!=null) p.closeInventory(); }); checking.clear(); captchaSlots.clear(); sender.sendMessage("§cAntiBot disabled."); }
+            case "on" -> { setProtectionEnabled(true); sender.sendMessage("§aAntiBot enabled."); }
+            case "off" -> { setProtectionEnabled(false); sender.sendMessage("§cAntiBot disabled."); }
             case "whitelist" -> handleWhitelist(sender, args);
             case "gui" -> { if (sender instanceof Player player) openSecurityGui(player); }
             default -> sender.sendMessage("§cUsage: /antibot <on|off|status|whitelist add|remove <player>|gui>");
