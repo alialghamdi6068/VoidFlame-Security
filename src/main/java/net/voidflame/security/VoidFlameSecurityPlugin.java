@@ -300,9 +300,8 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         WorldCreator creator = new WorldCreator(name);
         creator.generator(new ChunkGenerator() {
             @Override
-            public ChunkData generateChunkData(WorldInfo worldInfo, java.util.Random random, int chunkX, int chunkZ, BiomeGrid biome) {
-                World world = Bukkit.getWorld(worldInfo.getName());
-                return world == null ? null : createChunkData(world);
+            public ChunkData generateChunkData(World world, java.util.Random random, int chunkX, int chunkZ, BiomeGrid biome) {
+                return createChunkData(world);
             }
         });
         authWorld = creator.createWorld();
