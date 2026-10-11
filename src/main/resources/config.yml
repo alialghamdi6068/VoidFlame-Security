@@ -1,8 +1,6 @@
-# ================================================================
-# VoidFlame Security • Production Configuration
-# Paper 26.2 • Java 25
-# ================================================================
-# Anti-bot, CAPTCHA, rate limits, escalation and whitelist controls.
+# VoidFlame Security | VoidFlameMC SMP
+# Paper 26.2 / Java 25. Keep network-level DDoS protection at the host/proxy/firewall.
+
 settings:
   enabled: true
   lockdown: false
@@ -34,20 +32,18 @@ captcha:
   timeout-seconds: 15
   max-attempts: 2
   verification-hours: 24
-  title: "§8🛡 Security Verification"
+  title: "§8Security Verification"
   correct-item: EMERALD
   filler-item: GRAY_STAINED_GLASS_PANE
   correct-name: "§aClick the correct item"
   filler-name: "§7Verification"
 
-messages:
-  lockdown: "&cThe server is temporarily locked down by security protection."
-  verified: "§a✓ Verification successful."
-  failed: "§cVerification failed."
-  timeout: "§cVerification timed out."
-  join-flood: "§cJoin flood protection is active."
-  temporarily-blocked: "§cSecurity protection is active. Please try again later."
-  escalated-kick: "§cSecurity protection triggered."
+combat-tag:
+  enabled: true
+  seconds: 15
+  drop-inventory-on-logout: true
+  # The normal Minecraft death path still controls full-loot drops on actual death.
+  # A combat logout drops storage, armor and offhand at the player's last location.
 
 new-account-protection:
   enabled: true
@@ -66,8 +62,6 @@ whitelist:
   bypass-rate-limits: true
   bypass-new-account-protection: true
 
-# Conservative server-side anomaly detection. These checks flag repeated
-# impossible patterns and feed the existing risk/escalation system.
 anti-cheat:
   enabled: true
   movement:
@@ -84,15 +78,12 @@ anti-cheat:
     flag-after-fast-attacks: 8
 
 authentication:
-  # In auto mode, local registration/login is enforced only when server.properties online-mode=false.
-  # Online-mode servers keep Mojang authentication and do not ask players for passwords.
   enabled: true
   mode: auto
   password-min-length: 8
   max-attempts: 5
   lock-seconds: 300
   pbkdf2-iterations: 210000
-  # Unauthenticated players are isolated in a generated empty world until login/register succeeds.
   void-world:
     enabled: true
     name: "VoidFlame-Auth"
@@ -110,11 +101,7 @@ authentication:
     logged-in: "&aLogin successful."
     too-many-attempts: "&cToo many authentication attempts. Please reconnect later."
 
-# ================================================================
-# Advanced network / attack protection
-# ================================================================
 connection:
-  # Per-IP connection admission control.
   window-seconds: 10
   max-per-ip: 8
   max-burst-per-ip: 4
@@ -129,7 +116,6 @@ correlation:
   critical-active-subnets: 3
 
 attack-mode:
-  # Automatic global escalation based on recent connections/joins and TPS.
   elevated-joins: 4
   high-joins: 10
   critical-joins: 20
@@ -141,15 +127,12 @@ blocking:
   ip-block-seconds: 300
   subnet-block-seconds: 600
   block-subnet-on-correlation: true
-  # Reserved slots are protected for trusted/verified/staff players in lockdown.
   trusted-slots-only: true
 
 verified-cache:
   temporary-trust-seconds: 120
 
 packets:
-  # These are safe Bukkit/Paper-level payload guards. Raw Netty/NMS packet
-  # interception is intentionally not used because it is version-internal.
   max-plugin-message-bytes: 32767
   max-payloads-per-second: 30
 
@@ -173,10 +156,4 @@ alerts:
   enabled: true
   cooldown-seconds: 15
   message-prefix: "§5[Security] §f"
-  # Leave empty to disable. Never commit a real webhook URL to GitHub.
   discord-webhook: ""
-
-# Paper's public API does not expose a stable raw-Netty packet interception
-# contract. The plugin therefore implements connection/login/payload guards
-# through supported events instead of brittle NMS channel injection.
-\n
