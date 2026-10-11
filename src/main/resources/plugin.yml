@@ -1,7 +1,7 @@
 name: VoidFlame-Security
-version: 1.0.0
+version: 2.0.0
 main: net.voidflame.security.VoidFlameSecurityPlugin
-description: Advanced AntiBot, captcha, rate limiting and abuse protection for VoidFlame MC.
+description: AntiBot, exploit protection, anti-cheat and SMP combat logout protection for VoidFlameMC.
 author: VoidFlame
 website: https://github.com/alialghamdi6068/VoidFlame-Security
 api-version: '26.2'
@@ -33,3 +33,6 @@ permissions:
   voidflame.security.anticheat.bypass:
     description: Bypass VoidFlame anti-cheat detection for trusted staff/testing.
     default: false
+  voidflame.security.combat.bypass:
+    description: Bypass combat-logout inventory punishment.
+    default: op
