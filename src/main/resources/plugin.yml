@@ -1,7 +1,7 @@
 name: VoidFlame-Security
 version: 2.0.0
 main: net.voidflame.security.VoidFlameSecurityPlugin
-description: AntiBot, exploit protection, anti-cheat and SMP combat logout protection for VoidFlameMC.
+description: AntiBot, rate limiting, exploit protection and Practice/Duels security for VoidFlameMC.
 author: VoidFlame
 website: https://github.com/alialghamdi6068/VoidFlame-Security
 api-version: '26.2'
