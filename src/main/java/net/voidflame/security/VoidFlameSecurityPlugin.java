@@ -72,7 +72,6 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         getServer().getPluginManager().registerEvents(this, this);
         getServer().getPluginManager().registerEvents(new SecurityDetectionListener(this), this);
         getServer().getPluginManager().registerEvents(new AdvancedProtectionListener(this), this);
-        getServer().getPluginManager().registerEvents(new SurvivalCombatSecurityListener(this), this);
         Objects.requireNonNull(getCommand("antibot")).setExecutor((sender, command, label, args) -> command(sender, args));
         Objects.requireNonNull(getCommand("antibot")).setTabCompleter((sender, command, alias, args) -> tabComplete(args));
         long decayTicks = Math.max(10L, getConfig().getLong("antibot.decay-seconds", 300L) * 20L);
