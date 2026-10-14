@@ -68,8 +68,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
             return;
         }
         loadWhitelistAsync();
-        prepareAuthWorld();
-        getServer().getPluginManager().registerEvents(new AuthListener(), this);
+        // VoidFlameMC uses Minecraft's normal authentication. Local /login and /register are disabled.
         getServer().getPluginManager().registerEvents(this, this);
         getServer().getPluginManager().registerEvents(new SecurityDetectionListener(this), this);
         getServer().getPluginManager().registerEvents(new AdvancedProtectionListener(this), this);
@@ -290,7 +289,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     }
 
     private boolean authEnabled() {
-        return getConfig().getBoolean("authentication.enabled", true);
+        return false;
     }
 
     private void prepareAuthWorld() {
