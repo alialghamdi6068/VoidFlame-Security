@@ -1,7 +1,7 @@
 name: VoidFlame-Security
 version: 2.0.0
 main: net.voidflame.security.VoidFlameSecurityPlugin
-description: AntiBot, rate limiting, exploit protection and Practice/Duels security for VoidFlameMC.
+description: AntiBot, rate limiting and exploit protection for VoidFlameMC SMP.
 author: VoidFlame
 website: https://github.com/alialghamdi6068/VoidFlame-Security
 api-version: '26.2'
@@ -13,13 +13,6 @@ commands:
     description: Manage VoidFlame AntiBot protection.
     usage: /antibot <on|off|status|whitelist>
     permission: voidflame.security.manage
-  register:
-    description: Register a local account on offline-mode servers.
-    usage: /register <password> <confirm>
-  login:
-    description: Authenticate a local account on offline-mode servers.
-    usage: /login <password>
-
 permissions:
   voidflame.security.manage:
     description: Manage AntiBot protection.
