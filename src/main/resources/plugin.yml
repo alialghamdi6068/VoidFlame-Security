@@ -1,7 +1,7 @@
 name: VoidFlame-Security
 version: 2.0.0
 main: net.voidflame.security.VoidFlameSecurityPlugin
-description: AntiBot, rate limiting and exploit protection for VoidFlameMC SMP.
+description: AntiBot, rate limiting and exploit protection for VoidFlameMC Practice and Duels.
 author: VoidFlame
 website: https://github.com/alialghamdi6068/VoidFlame-Security
 api-version: '26.2'
