@@ -539,8 +539,8 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
 
     public boolean isSecurityTrusted(UUID id) {
         Player player = Bukkit.getPlayer(id);
-        return player != null && (player.isOp()
-                || player.hasPermission("voidflame.security.bypass")
+        return player != null && ((!SecurityClientAccess.isBedrock(player) && (player.isOp()
+                || player.hasPermission("voidflame.security.bypass")))
                 || whitelisted(player)
                 || verified.contains(id));
     }
@@ -550,7 +550,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     }
 
     private boolean bypassCaptcha(Player player) {
-        return player.isOp() || player.hasPermission("voidflame.security.bypass")
+        return (!SecurityClientAccess.isBedrock(player) && (player.isOp() || player.hasPermission("voidflame.security.bypass")))
                 || (whitelisted(player) && getConfig().getBoolean("whitelist.bypass-captcha", true));
     }
 
@@ -560,7 +560,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     }
 
     private boolean bypassRateLimits(Player player) {
-        return player.isOp() || player.hasPermission("voidflame.security.bypass")
+        return (!SecurityClientAccess.isBedrock(player) && (player.isOp() || player.hasPermission("voidflame.security.bypass")))
                 || (whitelisted(player) && getConfig().getBoolean("whitelist.bypass-rate-limits", true));
     }
 
@@ -648,6 +648,10 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     }
 
     private boolean command(org.bukkit.command.CommandSender sender, String[] args) {
+        if (sender instanceof Player player && SecurityClientAccess.isBedrock(player)) {
+            sender.sendMessage("§cJava staff only.");
+            return true;
+        }
         if (!sender.hasPermission("voidflame.security.manage")) { sender.sendMessage("§cNo permission."); return true; }
         if (args.length == 0 || args[0].equalsIgnoreCase("status")) {
             sender.sendMessage("§8§m----------------");
