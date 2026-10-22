@@ -251,11 +251,6 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     }
 
     @EventHandler
-    public void onClose(InventoryCloseEvent event) {
-        // Verification is a non-dismissible native Dialog; legacy inventory reopen is intentionally removed.
-    }
-
-    @EventHandler
     public void onMove(PlayerMoveEvent event) {
         if (authRequired.contains(event.getPlayer().getUniqueId())) { event.setTo(event.getFrom()); return; }
         if (checking.contains(event.getPlayer().getUniqueId())
