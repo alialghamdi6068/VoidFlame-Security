@@ -21,7 +21,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.*;
 import org.bukkit.event.block.BlockPlaceEvent;
@@ -820,16 +819,6 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
                         .build())
                 .type(DialogType.multiAction(actions).columns(2).build()));
         viewer.showDialog(dialog);
-    }
-
-    @EventHandler
-    public void onSecurityGuiClick(InventoryClickEvent event) {
-        // Administrative security controls are native Dialogs; no inventory GUI is used.
-    }
-
-    @EventHandler
-    public void onWhitelistGuiClick(InventoryClickEvent event) {
-        // Whitelist management is handled by native Dialogs and the permission-checked command path.
     }
 
     private void persistWhitelist() {
