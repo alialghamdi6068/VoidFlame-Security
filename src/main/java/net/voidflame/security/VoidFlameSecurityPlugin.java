@@ -166,15 +166,14 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
                 }, bedrockTimeout);
                 return;
             }
+            List<String> labels = List.of("Emerald", "Amethyst", "Copper", "Quartz", "Lapis", "Obsidian", "Prismarine", "Redstone", "Diamond");
             List<ActionButton> choices = new ArrayList<>();
             List<Integer> order = new ArrayList<>(List.of(0,1,2,3,4,5,6,7,8));
             Collections.shuffle(order);
-            int correctButton = order.indexOf(correct);
-            for (int i = 0; i < order.size(); i++) {
-                int option = order.get(i);
-                String label = option == correct ? "Verify Identity" : "Option " + (i + 1);
-                choices.add(securityButton(label, "Select the verification option.", "/antibot verify " + option,
-                        option == correct ? NamedTextColor.GREEN : NamedTextColor.GRAY));
+            for (int option : order) {
+                String label = labels.get(option);
+                choices.add(securityButton(label, "Choose " + labels.get(correct) + ".", "/antibot verify " + option,
+                        NamedTextColor.AQUA));
             }
             captchaSlots.put(player.getUniqueId(), correct);
             Dialog dialog = Dialog.create(builder -> builder.empty()
@@ -182,8 +181,8 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
                             .externalTitle(Component.text("Verify", NamedTextColor.AQUA))
                             .canCloseWithEscape(false)
                             .body(List.of(
-                                    DialogBody.plainMessage(Component.text("Confirm that you are a player, not an automated client.", NamedTextColor.WHITE), 320),
-                                    DialogBody.plainMessage(Component.text("Choose the button labelled Verify Identity.", NamedTextColor.GRAY), 320)))
+                                    DialogBody.plainMessage(Component.text("Select the item named " + labels.get(correct) + ".", NamedTextColor.WHITE), 320),
+                                    DialogBody.plainMessage(Component.text("You have a limited time and limited attempts.", NamedTextColor.GRAY), 320)))
                             .build())
                     .type(DialogType.multiAction(choices).columns(3).build()));
             player.showDialog(dialog);
@@ -203,13 +202,14 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
             finishCheck(player, false);
             return;
         }
+        List<String> labels = List.of("Emerald", "Amethyst", "Copper", "Quartz", "Lapis", "Obsidian", "Prismarine", "Redstone", "Diamond");
         List<Integer> options = new ArrayList<>(List.of(0,1,2,3,4,5,6,7,8));
         Collections.shuffle(options);
         SimpleForm.Builder form = SimpleForm.builder().title("Security Verification")
-                .content("Choose the button labelled Verify Identity.");
+                .content("Select the item named " + labels.get(correct) + ".");
         List<Integer> actionChoices = new ArrayList<>();
         for (int option : options) {
-            form.button(option == correct ? "Verify Identity" : "Option " + (options.indexOf(option) + 1));
+            form.button(labels.get(option));
             actionChoices.add(option);
         }
         form.validResultHandler((SimpleFormResponse response) -> {
