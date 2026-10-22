@@ -145,24 +145,39 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
 
     private void activateChallenge(Player player) {
         if (!checking.add(player.getUniqueId())) return;
-        int size = Math.max(9, Math.min(54, getConfig().getInt("captcha.size", 27)));
-        int slots = size / 9;
-        int correct = new Random().nextInt(size);
+        int correct = new Random().nextInt(9);
         captchaSlots.put(player.getUniqueId(), correct);
         captchaAttempts.put(player.getUniqueId(), 0);
         captchaStarted.put(player.getUniqueId(), System.currentTimeMillis());
 
         Bukkit.getScheduler().runTask(this, () -> {
             if (!player.isOnline()) { finishCheck(player, false); return; }
-            Inventory inv = Bukkit.createInventory(null, slots * 9,
-                    getConfig().getString("captcha.title", "§8Security Verification"));
-            Material correctMaterial = material("captcha.correct-item", Material.EMERALD);
-            Material filler = material("captcha.filler-item", Material.GRAY_STAINED_GLASS_PANE);
-            ItemStack fillerStack = item(filler, getConfig().getString("captcha.filler-name", "§7Verification"));
-            for (int i = 0; i < inv.getSize(); i++) inv.setItem(i, fillerStack.clone());
-            inv.setItem(correct, item(correctMaterial, getConfig().getString("captcha.correct-name", "§aClick to verify")));
-            player.openInventory(inv);
-
+            if (SecurityClientAccess.isBedrock(player)) {
+                player.kickPlayer("§cBedrock verification is unavailable. Please reconnect later.");
+                finishCheck(player, false);
+                return;
+            }
+            List<ActionButton> choices = new ArrayList<>();
+            List<Integer> order = new ArrayList<>(List.of(0,1,2,3,4,5,6,7,8));
+            Collections.shuffle(order);
+            int correctButton = order.indexOf(correct);
+            for (int i = 0; i < order.size(); i++) {
+                int option = order.get(i);
+                String label = option == correct ? "Verify Identity" : "Option " + (i + 1);
+                choices.add(securityButton(label, "Select the verification option.", "/antibot verify " + option,
+                        option == correct ? NamedTextColor.GREEN : NamedTextColor.GRAY));
+            }
+            captchaSlots.put(player.getUniqueId(), correct);
+            Dialog dialog = Dialog.create(builder -> builder.empty()
+                    .base(DialogBase.builder(Component.text("Security Verification", NamedTextColor.WHITE))
+                            .externalTitle(Component.text("Verify", NamedTextColor.AQUA))
+                            .canCloseWithEscape(false)
+                            .body(List.of(
+                                    DialogBody.plainMessage(Component.text("Confirm that you are a player, not an automated client.", NamedTextColor.WHITE), 320),
+                                    DialogBody.plainMessage(Component.text("Choose the button labelled Verify Identity.", NamedTextColor.GRAY), 320)))
+                            .build())
+                    .type(DialogType.multiAction(choices).columns(3).build()));
+            player.showDialog(dialog);
             long timeout = Math.max(5, getConfig().getLong("captcha.timeout-seconds", 20)) * 20L;
             Bukkit.getScheduler().runTaskLater(this, () -> {
                 if (checking.contains(player.getUniqueId())) {
@@ -173,40 +188,31 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         });
     }
 
-    @EventHandler
-    public void onCaptchaClick(InventoryClickEvent event) {
-        if (!(event.getWhoClicked() instanceof Player player) || !checking.contains(player.getUniqueId())) return;
-        event.setCancelled(true);
-        if (!event.getView().getTitle().equals(getConfig().getString("captcha.title", "§8Security Verification"))) return;
-
+    public void handleVerificationChoice(Player player, int choice) {
+        if (!checking.contains(player.getUniqueId())) return;
         Integer correct = captchaSlots.get(player.getUniqueId());
         int attempts = captchaAttempts.merge(player.getUniqueId(), 1, Integer::sum);
         int maxAttempts = Math.max(1, getConfig().getInt("captcha.max-attempts", 3));
         if (correct == null) return;
-        if (attempts > maxAttempts) {
+        if (attempts > maxAttempts || choice != correct) {
             finishCheck(player, false);
-            player.closeInventory();
             player.kickPlayer(getConfig().getString("messages.failed", "§cVerification failed."));
             return;
         }
-        if (event.getRawSlot() == correct) {
-            finishCheck(player, true);
-            player.closeInventory();
-            player.sendMessage(getConfig().getString("messages.verified", "§aVerification successful."));
-        } else if (event.getRawSlot() >= 0 && event.getRawSlot() < event.getInventory().getSize()) {
-            finishCheck(player, false);
-            player.closeInventory();
-            player.kickPlayer(getConfig().getString("messages.failed", "§cVerification failed."));
+        finishCheck(player, true);
+        player.sendMessage(getConfig().getString("messages.verified", "§aVerification successful."));
+    }
+
+    @EventHandler
+    public void onCaptchaClick(InventoryClickEvent event) {
+        if (event.getWhoClicked() instanceof Player player && checking.contains(player.getUniqueId())) {
+            event.setCancelled(true);
         }
     }
 
     @EventHandler
     public void onClose(InventoryCloseEvent event) {
-        if (event.getPlayer() instanceof Player player && checking.contains(player.getUniqueId())) {
-            Bukkit.getScheduler().runTask(this, () -> {
-                if (checking.contains(player.getUniqueId()) && player.isOnline()) player.openInventory(event.getInventory());
-            });
-        }
+        // Verification is a non-dismissible native Dialog; legacy inventory reopen is intentionally removed.
     }
 
     @EventHandler
@@ -676,6 +682,11 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
             case "on" -> { setProtectionEnabled(true); sender.sendMessage("§aAntiBot enabled."); }
             case "off" -> { setProtectionEnabled(false); sender.sendMessage("§cAntiBot disabled."); }
             case "lockdown" -> { setLockdown(!lockdown); sender.sendMessage("§eLockdown " + (lockdown ? "enabled." : "disabled.")); }
+            case "verify" -> {
+                if (!(sender instanceof Player player) || args.length < 2) { sender.sendMessage("§cUsage: /antibot verify <choice>"); return true; }
+                try { handleVerificationChoice(player, Integer.parseInt(args[1])); }
+                catch (NumberFormatException ex) { player.kickPlayer("§cInvalid verification response."); }
+            }
             case "whitelist" -> { if (args.length == 1 && sender instanceof Player player) openWhitelistGui(player); else handleWhitelist(sender, args); }
             case "gui" -> { if (sender instanceof Player player) openSecurityGui(player); }
             default -> sender.sendMessage("§cUsage: /antibot <on|off|lockdown|status|whitelist add|remove <player>|gui>");
