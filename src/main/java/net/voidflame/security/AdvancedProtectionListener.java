@@ -39,6 +39,10 @@ public final class AdvancedProtectionListener implements Listener {
         }
     }
 
+    private static final java.net.http.HttpClient WEBHOOK_CLIENT = java.net.http.HttpClient.newBuilder()
+            .connectTimeout(java.time.Duration.ofSeconds(3))
+            .build();
+
     private final VoidFlameSecurityPlugin plugin;
     private final Map<String, Window> ipJoins = new ConcurrentHashMap<>();
     private final Map<String, Window> subnetJoins = new ConcurrentHashMap<>();
@@ -350,15 +354,15 @@ public final class AdvancedProtectionListener implements Listener {
 
     private void sendWebhook(String webhook, String text) {
         try {
-            var client = java.net.http.HttpClient.newHttpClient();
             String body = "{\"content\":\""
                     + jsonEscape(text)
                     + "\"}";
             var request = java.net.http.HttpRequest.newBuilder(java.net.URI.create(webhook))
+                    .timeout(java.time.Duration.ofSeconds(5))
                     .header("Content-Type", "application/json")
                     .POST(java.net.http.HttpRequest.BodyPublishers.ofString(body))
                     .build();
-            client.send(request, java.net.http.HttpResponse.BodyHandlers.discarding());
+            WEBHOOK_CLIENT.send(request, java.net.http.HttpResponse.BodyHandlers.discarding());
         } catch (Exception ex) {
             plugin.getLogger().fine("Discord security alert failed: " + ex.getMessage());
         }
