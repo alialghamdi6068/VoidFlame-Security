@@ -16,7 +16,6 @@ import net.voidflame.core.storage.StorageService;
 import net.voidflame.core.api.AuditLogService;
 
 import org.bukkit.Bukkit;
-import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -26,9 +25,6 @@ import org.bukkit.event.player.*;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
-import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.WorldCreator;
 import org.bukkit.World;
@@ -825,25 +821,5 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         String value = String.join(",", whitelist.stream().map(UUID::toString).sorted().toList());
         storage.put("security", "whitelist", value).exceptionally(error -> { getLogger().warning("Could not persist whitelist: " + error.getMessage()); return null; });
     }
-    private Material material(String path, Material fallback) {
-        Material m = Material.matchMaterial(getConfig().getString(path, fallback.name()));
-        return m == null ? fallback : m;
-    }
 
-    private void item(Inventory inventory, int slot, Material material, String name, String... lore) {
-        ItemStack stack = item(material, name);
-        ItemMeta meta = stack.getItemMeta();
-        if (meta != null && lore.length > 0) {
-            meta.setLore(Arrays.asList(lore));
-            stack.setItemMeta(meta);
-        }
-        inventory.setItem(slot, stack);
-    }
-
-    private ItemStack item(Material material, String name) {
-        ItemStack stack = new ItemStack(material);
-        ItemMeta meta = stack.getItemMeta();
-        if (meta != null) { meta.setDisplayName(name); stack.setItemMeta(meta); }
-        return stack;
-    }
 }
