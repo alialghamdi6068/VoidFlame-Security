@@ -11,9 +11,8 @@ softdepend: [floodgate, Geyser-Spigot]
 
 commands:
   antibot:
-    description: Manage VoidFlame AntiBot protection.
+    description: Manage VoidFlame AntiBot protection and submit verification responses.
     usage: /antibot <on|off|status|whitelist>
-    permission: voidflame.security.manage
 permissions:
   voidflame.security.manage:
     description: Manage AntiBot protection.
