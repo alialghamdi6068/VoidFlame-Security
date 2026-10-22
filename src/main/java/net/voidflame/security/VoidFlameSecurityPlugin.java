@@ -675,9 +675,10 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         switch (args[0].toLowerCase(Locale.ROOT)) {
             case "on" -> { setProtectionEnabled(true); sender.sendMessage("§aAntiBot enabled."); }
             case "off" -> { setProtectionEnabled(false); sender.sendMessage("§cAntiBot disabled."); }
+            case "lockdown" -> { setLockdown(!lockdown); sender.sendMessage("§eLockdown " + (lockdown ? "enabled." : "disabled.")); }
             case "whitelist" -> { if (args.length == 1 && sender instanceof Player player) openWhitelistGui(player); else handleWhitelist(sender, args); }
             case "gui" -> { if (sender instanceof Player player) openSecurityGui(player); }
-            default -> sender.sendMessage("§cUsage: /antibot <on|off|status|whitelist add|remove <player>|gui>");
+            default -> sender.sendMessage("§cUsage: /antibot <on|off|lockdown|status|whitelist add|remove <player>|gui>");
         }
         return true;
     }
@@ -715,7 +716,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         actions.add(securityButton(lockdown ? "Lockdown: Enabled" : "Lockdown: Disabled",
                 "Current emergency admission setting.", "/antibot lockdown", NamedTextColor.GOLD));
         actions.add(securityButton("Refresh Status", "Refresh current protection state.", "/antibot status", NamedTextColor.BLUE));
-        actions.add(securityButton("Close", "Close this dialog.", "/dialog close", NamedTextColor.GRAY));
+         
         Dialog dialog = Dialog.create(builder -> builder.empty()
                 .base(DialogBase.builder(Component.text("VoidFlame Security", NamedTextColor.WHITE))
                         .externalTitle(Component.text("Security", NamedTextColor.AQUA)).canCloseWithEscape(true)
