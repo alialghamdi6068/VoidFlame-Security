@@ -332,7 +332,7 @@ public final class AdvancedProtectionListener implements Listener {
         return plugin.getConfig().getString(path, fallback);
     }
 
-    private void alert(String text) {
+    private synchronized void alert(String text) {
         if (!plugin.getConfig().getBoolean("alerts.enabled", true)) return;
         long now = System.currentTimeMillis();
         long cooldown = Math.max(1L, plugin.getConfig().getLong("alerts.cooldown-seconds", 15L)) * 1000L;
@@ -340,37 +340,45 @@ public final class AdvancedProtectionListener implements Listener {
         lastAlert = now;
 
         String prefix = plugin.getConfig().getString("alerts.message-prefix", "§5[Security] §f");
-        Bukkit.getOnlinePlayers().stream()
+        // Alerts can originate from AsyncPlayerPreLoginEvent. Bukkit player access
+        // must therefore be deferred to the server thread.
+        Bukkit.getScheduler().runTask(plugin, () -> Bukkit.getOnlinePlayers().stream()
                 .filter(this::isTrusted)
-                .forEach(p -> p.sendMessage(prefix + text));
+                .forEach(p -> p.sendMessage(prefix + text)));
 
-        String webhook = plugin.getConfig().getString("alerts.discord-webhook", "").trim();
-        if (webhook.isEmpty()) return;
+        String webhook = plugin.getConfig().getString("alerts.discord-webhook", "");
+        if (webhook == null || webhook.isBlank()) return;
+        webhook = webhook.trim();
         if (!webhook.startsWith("https://discord.com/api/webhooks/")
                 && !webhook.startsWith("https://discordapp.com/api/webhooks/")) return;
 
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> sendWebhook(webhook, text));
+        String destination = webhook;
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> sendWebhook(destination, text));
     }
 
     private void sendWebhook(String webhook, String text) {
         try {
-            String body = "{\"content\":\""
-                    + jsonEscape(text)
-                    + "\"}";
+            String body = "{\"content\":\"" + jsonEscape(text) + "\"}";
             var request = java.net.http.HttpRequest.newBuilder(java.net.URI.create(webhook))
                     .timeout(java.time.Duration.ofSeconds(5))
                     .header("Content-Type", "application/json")
                     .POST(java.net.http.HttpRequest.BodyPublishers.ofString(body))
                     .build();
-            WEBHOOK_CLIENT.send(request, java.net.http.HttpResponse.BodyHandlers.discarding());
+            var response = WEBHOOK_CLIENT.send(request, java.net.http.HttpResponse.BodyHandlers.discarding());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                plugin.getLogger().fine("Discord security alert returned HTTP " + response.statusCode() + ".");
+            }
         } catch (Exception ex) {
             plugin.getLogger().fine("Discord security alert failed: " + ex.getMessage());
         }
     }
 
     private String jsonEscape(String value) {
-        return value.replace("\\\\", "\\\\\\\\").replace("\"", "\\\"")
-                .replace("\\n", " ").replace("\\r", " ");
+        return value.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", " ")
+                .replace("\r", " ")
+                .replace("\t", " ");
     }
 
     private String round(double value) {
