@@ -700,6 +700,15 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     }
 
     private boolean command(org.bukkit.command.CommandSender sender, String[] args) {
+        if (args.length > 0 && args[0].equalsIgnoreCase("verify")) {
+            if (!(sender instanceof Player player) || args.length < 2 || !checking.contains(player.getUniqueId())) {
+                sender.sendMessage("§cNo active verification session.");
+                return true;
+            }
+            try { handleVerificationChoice(player, Integer.parseInt(args[1])); }
+            catch (NumberFormatException ex) { player.kickPlayer("§cInvalid verification response."); }
+            return true;
+        }
         if (sender instanceof Player player && SecurityClientAccess.isBedrock(player)) {
             sender.sendMessage("§cJava staff only.");
             return true;
@@ -719,11 +728,6 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
             case "on" -> { setProtectionEnabled(true); sender.sendMessage("§aAntiBot enabled."); }
             case "off" -> { setProtectionEnabled(false); sender.sendMessage("§cAntiBot disabled."); }
             case "lockdown" -> { setLockdown(!lockdown); sender.sendMessage("§eLockdown " + (lockdown ? "enabled." : "disabled.")); }
-            case "verify" -> {
-                if (!(sender instanceof Player player) || args.length < 2) { sender.sendMessage("§cUsage: /antibot verify <choice>"); return true; }
-                try { handleVerificationChoice(player, Integer.parseInt(args[1])); }
-                catch (NumberFormatException ex) { player.kickPlayer("§cInvalid verification response."); }
-            }
             case "whitelist" -> { if (args.length == 1 && sender instanceof Player player) openWhitelistGui(player); else handleWhitelist(sender, args); }
             case "gui" -> { if (sender instanceof Player player) openSecurityGui(player); }
             default -> sender.sendMessage("§cUsage: /antibot <on|off|lockdown|status|whitelist add|remove <player>|gui>");
