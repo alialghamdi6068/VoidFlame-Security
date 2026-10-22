@@ -13,7 +13,6 @@ dependencies {
     compileOnly("io.papermc.paper:paper-api:26.2.build.129-stable")
     compileOnly("net.voidflame:VoidFlame-Core:api")
     compileOnly("org.geysermc.floodgate:api:2.2.5-SNAPSHOT")
-    compileOnly("org.geysermc.cumulus:cumulus:1.1.2")
 }
 java { toolchain.languageVersion.set(JavaLanguageVersion.of(25)); withSourcesJar() }
 tasks.withType<JavaCompile>().configureEach { options.encoding="UTF-8"; options.release.set(25) }
