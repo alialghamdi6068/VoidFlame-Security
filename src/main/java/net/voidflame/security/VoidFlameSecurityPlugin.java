@@ -8,6 +8,9 @@ import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import io.papermc.paper.registry.data.dialog.type.DialogType;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import org.geysermc.cumulus.form.SimpleForm;
+import org.geysermc.cumulus.response.SimpleFormResponse;
+import org.geysermc.floodgate.api.FloodgateApi;
 
 import net.voidflame.core.storage.StorageService;
 import net.voidflame.core.api.AuditLogService;
@@ -153,8 +156,14 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         Bukkit.getScheduler().runTask(this, () -> {
             if (!player.isOnline()) { finishCheck(player, false); return; }
             if (SecurityClientAccess.isBedrock(player)) {
-                player.kickPlayer("§cBedrock verification is unavailable. Please reconnect later.");
-                finishCheck(player, false);
+                openBedrockCaptcha(player, correct);
+                long bedrockTimeout = Math.max(5, getConfig().getLong("captcha.timeout-seconds", 20)) * 20L;
+                Bukkit.getScheduler().runTaskLater(this, () -> {
+                    if (checking.contains(player.getUniqueId())) {
+                        finishCheck(player, false);
+                        if (player.isOnline()) player.kickPlayer(getConfig().getString("messages.timeout", "§cVerification timed out."));
+                    }
+                }, bedrockTimeout);
                 return;
             }
             List<ActionButton> choices = new ArrayList<>();
@@ -186,6 +195,42 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
                 }
             }, timeout);
         });
+    }
+
+    private void openBedrockCaptcha(Player player, int correct) {
+        if (!Bukkit.getPluginManager().isPluginEnabled("floodgate")) {
+            player.kickPlayer("§cBedrock verification requires Floodgate. Please contact staff.");
+            finishCheck(player, false);
+            return;
+        }
+        List<Integer> options = new ArrayList<>(List.of(0,1,2,3,4,5,6,7,8));
+        Collections.shuffle(options);
+        SimpleForm.Builder form = SimpleForm.builder().title("Security Verification")
+                .content("Choose the button labelled Verify Identity.");
+        List<Integer> actionChoices = new ArrayList<>();
+        for (int option : options) {
+            form.button(option == correct ? "Verify Identity" : "Option " + (options.indexOf(option) + 1));
+            actionChoices.add(option);
+        }
+        form.validResultHandler((SimpleFormResponse response) -> {
+            int index = response.clickedButtonId();
+            Bukkit.getScheduler().runTask(this, () -> {
+                if (!player.isOnline() || !checking.contains(player.getUniqueId())) return;
+                if (index < 0 || index >= actionChoices.size()) return;
+                handleVerificationChoice(player, actionChoices.get(index));
+            });
+        });
+        try {
+            boolean sent = FloodgateApi.getInstance().sendForm(player.getUniqueId(), form.build());
+            if (!sent) {
+                finishCheck(player, false);
+                player.kickPlayer("§cCould not open verification form. Please reconnect.");
+            }
+        } catch (LinkageError | RuntimeException error) {
+            getLogger().warning("Could not open Bedrock verification form: " + error.getMessage());
+            finishCheck(player, false);
+            player.kickPlayer("§cCould not open verification form. Please reconnect.");
+        }
     }
 
     public void handleVerificationChoice(Player player, int choice) {
