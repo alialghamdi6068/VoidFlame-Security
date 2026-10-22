@@ -7,6 +7,7 @@ website: https://github.com/alialghamdi6068/VoidFlame-Security
 api-version: '26.2'
 load: POSTWORLD
 depend: [VoidFlame-Core]
+softdepend: [floodgate, Geyser-Spigot]
 
 commands:
   antibot:
