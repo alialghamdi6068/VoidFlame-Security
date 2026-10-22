@@ -1,5 +1,14 @@
 package net.voidflame.security;
 
+import io.papermc.paper.dialog.Dialog;
+import io.papermc.paper.registry.data.dialog.ActionButton;
+import io.papermc.paper.registry.data.dialog.DialogBase;
+import io.papermc.paper.registry.data.dialog.action.DialogAction;
+import io.papermc.paper.registry.data.dialog.body.DialogBody;
+import io.papermc.paper.registry.data.dialog.type.DialogType;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+
 import net.voidflame.core.storage.StorageService;
 import net.voidflame.core.api.AuditLogService;
 
@@ -666,7 +675,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         switch (args[0].toLowerCase(Locale.ROOT)) {
             case "on" -> { setProtectionEnabled(true); sender.sendMessage("§aAntiBot enabled."); }
             case "off" -> { setProtectionEnabled(false); sender.sendMessage("§cAntiBot disabled."); }
-            case "whitelist" -> handleWhitelist(sender, args);
+            case "whitelist" -> { if (args.length == 1 && sender instanceof Player player) openWhitelistGui(player); else handleWhitelist(sender, args); }
             case "gui" -> { if (sender instanceof Player player) openSecurityGui(player); }
             default -> sender.sendMessage("§cUsage: /antibot <on|off|status|whitelist add|remove <player>|gui>");
         }
@@ -693,83 +702,75 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         return List.of();
     }
 
-    private static final String SECURITY_GUI = "§8VoidFlame §5• §dSecurity";
-
     private void openSecurityGui(Player viewer) {
-        Inventory inv = Bukkit.createInventory(null, 54, SECURITY_GUI);
-        ItemStack filler = item(Material.BLACK_STAINED_GLASS_PANE, " ");
-        ItemStack accent = item(Material.PURPLE_STAINED_GLASS_PANE, " ");
-        for (int i=0;i<54;i++) inv.setItem(i, filler.clone());
-        for (int i=0;i<9;i++) inv.setItem(i, accent.clone());
-        for (int i=45;i<54;i++) inv.setItem(i, accent.clone());
-        item(inv, 4, Material.SHIELD, "§5§lSECURITY CONTROL CENTER",
-                "§7AntiBot • CAPTCHA • Rate Limits",
-                "§7Attack protection • Authentication");
-        item(inv, 20, enabled ? Material.LIME_DYE : Material.RED_DYE,
-                enabled ? "§a§lPROTECTION ONLINE" : "§c§lPROTECTION OFFLINE",
-                "§7Current protection level: §f" + protectionLevel,
-                "§7Verifying: §f" + checking.size());
-        item(inv, 22, Material.ENDER_EYE, "§b§lATTACK PROTECTION",
-                "§7Connection and subnet correlation",
-                "§7Automatic escalation is active");
-        item(inv, 24, Material.NAME_TAG, "§e§lAUTHENTICATION",
-                "§7Offline-mode registration/login",
-                "§7PBKDF2 password hashing");
-        item(inv, 30, Material.LIME_DYE, "§a§lWHITELIST",
-                "§7Manage trusted identities",
-                "§eClick §8» §fOpen");
-        item(inv, 32, Material.REDSTONE, "§c§lLOCKDOWN",
-                "§7Emergency admission controls",
-                "§8Configured thresholds are automatic");
-        item(inv, 40, Material.BOOK, "§7§lAUDIT",
-                "§7Security violations are persisted",
-                "§7through VoidFlame-Core");
-        item(inv, 49, Material.BARRIER, "§c§lCLOSE");
-        viewer.openInventory(inv);
+        if (!SecurityClientAccess.isBedrock(viewer) && !viewer.hasPermission("voidflame.security.manage")) {
+            viewer.sendMessage("§cNo permission.");
+            return;
+        }
+        List<ActionButton> actions = new ArrayList<>();
+        actions.add(securityButton(enabled ? "Disable Protection" : "Enable Protection",
+                "Current protection level: " + protectionLevel + " • Verifying: " + checking.size(),
+                "/antibot " + (enabled ? "off" : "on"), enabled ? NamedTextColor.RED : NamedTextColor.GREEN));
+        actions.add(securityButton("Whitelist", "Manage trusted online identities.", "/antibot whitelist", NamedTextColor.AQUA));
+        actions.add(securityButton(lockdown ? "Lockdown: Enabled" : "Lockdown: Disabled",
+                "Current emergency admission setting.", "/antibot lockdown", NamedTextColor.GOLD));
+        actions.add(securityButton("Refresh Status", "Refresh current protection state.", "/antibot status", NamedTextColor.BLUE));
+        actions.add(securityButton("Close", "Close this dialog.", "/dialog close", NamedTextColor.GRAY));
+        Dialog dialog = Dialog.create(builder -> builder.empty()
+                .base(DialogBase.builder(Component.text("VoidFlame Security", NamedTextColor.WHITE))
+                        .externalTitle(Component.text("Security", NamedTextColor.AQUA)).canCloseWithEscape(true)
+                        .body(List.of(
+                                DialogBody.plainMessage(Component.text("SECURITY CONTROL CENTER", NamedTextColor.AQUA), 300),
+                                DialogBody.plainMessage(Component.text("AntiBot: " + (enabled ? "ON" : "OFF")
+                                        + " • Lockdown: " + (lockdown ? "ON" : "OFF"), enabled ? NamedTextColor.GREEN : NamedTextColor.RED), 300),
+                                DialogBody.plainMessage(Component.text("Protection level: " + protectionLevel
+                                        + " • Verifying: " + checking.size() + " • Whitelist: " + whitelist.size(), NamedTextColor.GRAY), 300)))
+                        .build())
+                .type(DialogType.multiAction(actions).columns(2).build()));
+        viewer.showDialog(dialog);
+    }
+
+    private ActionButton securityButton(String label, String tooltip, String command, NamedTextColor color) {
+        return ActionButton.create(Component.text(label, color), Component.text(tooltip, NamedTextColor.GRAY),
+                180, DialogAction.commandTemplate(command));
     }
 
     private void openWhitelistGui(Player viewer) {
-        int size = Math.max(9, Math.min(54, getConfig().getInt("settings.whitelist-gui-size", 54)));
-        size -= size % 9;
-        Inventory inv = Bukkit.createInventory(null, size, getConfig().getString("settings.whitelist-gui-title", "§8Security Whitelist"));
+        if (SecurityClientAccess.isBedrock(viewer) || !viewer.hasPermission("voidflame.security.manage")) {
+            viewer.sendMessage("§cJava staff only.");
+            return;
+        }
+        List<ActionButton> actions = new ArrayList<>();
         List<Player> players = new ArrayList<>(Bukkit.getOnlinePlayers());
         players.sort(Comparator.comparing(Player::getName, String.CASE_INSENSITIVE_ORDER));
-        Material enabled = material("settings.whitelist-gui-player-item", Material.LIME_DYE);
-        Material disabled = material("settings.whitelist-gui-disabled-item", Material.GRAY_DYE);
-        String enabledName = getConfig().getString("settings.whitelist-gui-player-name", "§a<player>");
-        String disabledName = getConfig().getString("settings.whitelist-gui-disabled-name", "§7<player>");
-        for (int i = 0; i < Math.min(players.size(), size); i++) {
-            Player target = players.get(i);
+        for (Player target : players) {
             boolean active = whitelist.contains(target.getUniqueId());
-            inv.setItem(i, item(active ? enabled : disabled, (active ? enabledName : disabledName).replace("<player>", target.getName())));
+            actions.add(securityButton((active ? "Remove: " : "Trust: ") + target.getName(),
+                    active ? "Remove this identity from the whitelist." : "Add this identity to the whitelist.",
+                    "/antibot whitelist " + (active ? "remove " : "add ") + target.getName(),
+                    active ? NamedTextColor.RED : NamedTextColor.GREEN));
+            if (actions.size() >= 78) break;
         }
-        viewer.openInventory(inv);
+        actions.add(securityButton("Back to Security", "Return to the Security control center.", "/antibot gui", NamedTextColor.GRAY));
+        Dialog dialog = Dialog.create(builder -> builder.empty()
+                .base(DialogBase.builder(Component.text("Security Whitelist", NamedTextColor.WHITE))
+                        .externalTitle(Component.text("Security", NamedTextColor.AQUA)).canCloseWithEscape(true)
+                        .body(List.of(
+                                DialogBody.plainMessage(Component.text("TRUSTED IDENTITIES", NamedTextColor.AQUA), 300),
+                                DialogBody.plainMessage(Component.text("Select a player to add or remove them. Current whitelist: " + whitelist.size(), NamedTextColor.GRAY), 300)))
+                        .build())
+                .type(DialogType.multiAction(actions).columns(2).build()));
+        viewer.showDialog(dialog);
     }
 
     @EventHandler
     public void onSecurityGuiClick(InventoryClickEvent event) {
-        if (!(event.getWhoClicked() instanceof Player viewer)) return;
-        if (!event.getView().getTitle().equals(SECURITY_GUI)) return;
-        event.setCancelled(true);
-        if (event.getRawSlot() == 30) openWhitelistGui(viewer);
-        else if (event.getRawSlot() == 49) viewer.closeInventory();
+        // Administrative security controls are native Dialogs; no inventory GUI is used.
     }
 
     @EventHandler
     public void onWhitelistGuiClick(InventoryClickEvent event) {
-        if (!(event.getWhoClicked() instanceof Player viewer)) return;
-        String title = getConfig().getString("settings.whitelist-gui-title", "§8Security Whitelist");
-        if (!event.getView().getTitle().equals(title)) return;
-        event.setCancelled(true);
-        int slot = event.getRawSlot();
-        if (slot < 0 || slot >= event.getInventory().getSize()) return;
-        List<Player> players = new ArrayList<>(Bukkit.getOnlinePlayers());
-        players.sort(Comparator.comparing(Player::getName, String.CASE_INSENSITIVE_ORDER));
-        if (slot >= players.size()) return;
-        UUID id = players.get(slot).getUniqueId();
-        if (!whitelist.add(id)) whitelist.remove(id);
-        persistWhitelist();
-        openWhitelistGui(viewer);
+        // Whitelist management is handled by native Dialogs and the permission-checked command path.
     }
 
     private void persistWhitelist() {
