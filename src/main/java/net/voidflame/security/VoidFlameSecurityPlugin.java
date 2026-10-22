@@ -287,6 +287,8 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
             return;
         }
         if (checking.contains(event.getPlayer().getUniqueId())) {
+            String raw = event.getMessage().toLowerCase(Locale.ROOT);
+            if (raw.startsWith("/antibot verify ")) return;
             event.setCancelled(true);
             return;
         }
