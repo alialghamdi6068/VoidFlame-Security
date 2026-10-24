@@ -676,17 +676,22 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
             blockedUntil.put(player, System.currentTimeMillis()
                     + Math.max(5, getConfig().getLong("escalation.block-seconds", 60)) * 1000L);
             protectionLevel = Math.max(protectionLevel, 3);
-            Player online = Bukkit.getPlayer(player);
-            if (online != null) Bukkit.getScheduler().runTask(this, () ->
-                    online.kickPlayer(getConfig().getString("messages.escalated-kick", "§cSecurity protection triggered.")));
+            Bukkit.getScheduler().runTask(this, () -> {
+                Player online = Bukkit.getPlayer(player);
+                if (online != null && online.isOnline()) {
+                    online.kickPlayer(getConfig().getString("messages.escalated-kick", "§cSecurity protection triggered."));
+                }
+            });
         } else if (score >= throttleAt) {
             protectionLevel = Math.max(protectionLevel, 2);
         } else if (score >= verifyAt) {
             protectionLevel = Math.max(protectionLevel, 1);
-            Player online = Bukkit.getPlayer(player);
-            if (online != null && !checking.contains(player) && !bypassCaptcha(online)) {
-                Bukkit.getScheduler().runTask(this, () -> activateChallenge(online));
-            }
+            Bukkit.getScheduler().runTask(this, () -> {
+                Player online = Bukkit.getPlayer(player);
+                if (online != null && online.isOnline() && !checking.contains(player) && !bypassCaptcha(online)) {
+                    activateChallenge(online);
+                }
+            });
         }
         String key = "violation:" + player + ":" + System.currentTimeMillis();
         CompletableFuture<Void> persisted = storage.put("security", key, reason + "|score=" + score + "|level=" + protectionLevel);
