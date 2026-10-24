@@ -252,8 +252,13 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
 
     @EventHandler
     public void onMove(PlayerMoveEvent event) {
-        if (authRequired.contains(event.getPlayer().getUniqueId())) { event.setTo(event.getFrom()); return; }
-        if (checking.contains(event.getPlayer().getUniqueId())
+        if (event.getTo() == null) return;
+        UUID id = event.getPlayer().getUniqueId();
+        if (authRequired.contains(id)) {
+            event.setTo(event.getFrom());
+            return;
+        }
+        if (checking.contains(id)
                 && (event.getFrom().getBlockX() != event.getTo().getBlockX()
                 || event.getFrom().getBlockZ() != event.getTo().getBlockZ())) {
             event.setTo(event.getFrom());
