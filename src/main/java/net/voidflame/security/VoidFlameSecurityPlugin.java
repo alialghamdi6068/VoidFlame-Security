@@ -116,45 +116,53 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
             player.kickPlayer(getConfig().getString("messages.temporarily-blocked", "§cSecurity protection is active. Please try again later."));
             return;
         }
-        storage.get("security", "verified:" + id).thenAccept(value -> {
-            boolean alreadyVerified = false;
-            if (value != null) {
-                try {
-                    long expiry = Long.parseLong(value);
-                    alreadyVerified = expiry > System.currentTimeMillis();
-                    if (alreadyVerified) {
-                        verified.add(id);
-                        verifiedUntil.put(id, expiry);
+        storage.get("security", "verified:" + id).whenComplete((value, error) ->
+                Bukkit.getScheduler().runTask(this, () -> {
+                    if (error != null) {
+                        getLogger().warning("Verification lookup failed for " + id + ": " + error.getMessage());
+                        return;
+                    }
+                    if (!player.isOnline()) return;
+
+                    boolean alreadyVerified = false;
+                    if (value != null) {
+                        try {
+                            long expiry = Long.parseLong(value);
+                            alreadyVerified = expiry > System.currentTimeMillis();
+                            if (alreadyVerified) {
+                                verified.add(id);
+                                verifiedUntil.put(id, expiry);
+                            } else {
+                                verified.remove(id);
+                                verifiedUntil.remove(id);
+                            }
+                        } catch (NumberFormatException ignored) {
+                            verified.remove(id);
+                            verifiedUntil.remove(id);
+                        }
                     } else {
                         verified.remove(id);
                         verifiedUntil.remove(id);
                     }
-                } catch (NumberFormatException ignored) {
-                    verified.remove(id);
-                    verifiedUntil.remove(id);
-                }
-            } else {
-                verified.remove(id);
-                verifiedUntil.remove(id);
-            }
-            if (alreadyVerified || !player.isOnline() || bypassCaptcha(player)) return;
-            long window = Math.max(1, getConfig().getLong("antibot.join-window-seconds", 10)) * 1000L;
-            int threshold = Math.max(1, getConfig().getInt("antibot.join-threshold", 6));
-            long joins = joinTimes.values().stream().filter(t -> now - t <= window).count();
-            int attackMultiplier = Math.max(1, getConfig().getInt("antibot.attack-mode-multiplier", 3));
-            protectionLevel = joins >= threshold * attackMultiplier ? 3 : joins >= threshold * 2L ? 2 : joins >= threshold ? 1 : 0;
-            if (joins >= threshold * attackMultiplier) {
-                recordViolation(id, "join-flood-attack-mode");
-                Bukkit.getScheduler().runTask(this, () -> player.kickPlayer(
-                        getConfig().getString("messages.join-flood", "§cJoin flood protection is active.")));
-                return;
-            }
-            if (joins >= threshold
-                    || getConfig().getBoolean("antibot.always-check-new-players", false)
-                    || (getConfig().getBoolean("new-account-protection.enabled", true) && isNewAccount(player))) {
-                Bukkit.getScheduler().runTask(this, () -> activateChallenge(player));
-            }
-        }).exceptionally(error -> { getLogger().warning("Verification lookup failed: " + error.getMessage()); return null; });
+                    if (alreadyVerified || bypassCaptcha(player)) return;
+                    long currentNow = System.currentTimeMillis();
+                    long window = Math.max(1L, getConfig().getLong("antibot.join-window-seconds", 10L)) * 1000L;
+                    int threshold = Math.max(1, getConfig().getInt("antibot.join-threshold", 6));
+                    long joins = joinTimes.values().stream().filter(t -> currentNow - t <= window).count();
+                    int attackMultiplier = Math.max(1, getConfig().getInt("antibot.attack-mode-multiplier", 3));
+                    protectionLevel = joins >= threshold * attackMultiplier ? 3
+                            : joins >= threshold * 2L ? 2 : joins >= threshold ? 1 : 0;
+                    if (joins >= threshold * attackMultiplier) {
+                        recordViolation(id, "join-flood-attack-mode");
+                        player.kickPlayer(getConfig().getString("messages.join-flood", "§cJoin flood protection is active."));
+                        return;
+                    }
+                    if (joins >= threshold
+                            || getConfig().getBoolean("antibot.always-check-new-players", false)
+                            || (getConfig().getBoolean("new-account-protection.enabled", true) && isNewAccount(player))) {
+                        activateChallenge(player);
+                    }
+                }));
     }
 
     private void activateChallenge(Player player) {
