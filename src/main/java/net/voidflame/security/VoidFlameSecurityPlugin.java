@@ -50,6 +50,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     private final Set<UUID> checking = ConcurrentHashMap.newKeySet();
     private final Set<UUID> verified = ConcurrentHashMap.newKeySet();
     private final Set<UUID> whitelist = ConcurrentHashMap.newKeySet();
+    private final Set<UUID> rateLimitBypass = ConcurrentHashMap.newKeySet();
     private final Set<UUID> authenticated = ConcurrentHashMap.newKeySet();
     private final Set<UUID> authRequired = ConcurrentHashMap.newKeySet();
     private final ConcurrentHashMap<UUID, Integer> authAttempts = new ConcurrentHashMap<>();
@@ -101,6 +102,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         UUID id = player.getUniqueId();
         long now = System.currentTimeMillis();
         joinTimes.put(id, now);
+        bypassRateLimits(player);
         if (authEnabled() && !Bukkit.getOnlineMode()) prepareAuthentication(player);
 
         if (lockdown && !isSecurityTrusted(id)) {
@@ -331,6 +333,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     public void onQuit(PlayerQuitEvent event) {
         UUID id = event.getPlayer().getUniqueId();
         actionWindows.remove(id);
+        rateLimitBypass.remove(id);
         authenticated.remove(id);
         authRequired.remove(id);
         authAttempts.remove(id);
@@ -612,13 +615,24 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     }
 
     private boolean bypassRateLimits(UUID id) {
-        Player player = Bukkit.getPlayer(id);
-        return player != null && bypassRateLimits(player);
+        if (Bukkit.isPrimaryThread()) {
+            Player player = Bukkit.getPlayer(id);
+            if (player != null) return bypassRateLimits(player);
+        }
+        return rateLimitBypass.contains(id)
+                || (getConfig().getBoolean("whitelist.enabled", true)
+                && getConfig().getBoolean("whitelist.bypass-rate-limits", true)
+                && whitelist.contains(id));
     }
 
     private boolean bypassRateLimits(Player player) {
-        return (!SecurityClientAccess.isBedrock(player) && (player.isOp() || player.hasPermission("voidflame.security.bypass")))
+        boolean bypass = (!SecurityClientAccess.isBedrock(player)
+                && (player.isOp() || player.hasPermission("voidflame.security.bypass")))
                 || (whitelisted(player) && getConfig().getBoolean("whitelist.bypass-rate-limits", true));
+        UUID id = player.getUniqueId();
+        if (bypass) rateLimitBypass.add(id);
+        else rateLimitBypass.remove(id);
+        return bypass;
     }
 
     private void loadWhitelistAsync() {
