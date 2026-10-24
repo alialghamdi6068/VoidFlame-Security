@@ -144,53 +144,48 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     }
 
     private void activateChallenge(Player player) {
-        if (!checking.add(player.getUniqueId())) return;
-        int correct = new Random().nextInt(9);
-        captchaSlots.put(player.getUniqueId(), correct);
-        captchaAttempts.put(player.getUniqueId(), 0);
-        captchaStarted.put(player.getUniqueId(), System.currentTimeMillis());
+        UUID id = player.getUniqueId();
+        if (!checking.add(id)) return;
+        int correct = new SecureRandom().nextInt(9);
+        captchaSlots.put(id, correct);
+        captchaAttempts.put(id, 0);
+        captchaStarted.put(id, System.currentTimeMillis());
 
         Bukkit.getScheduler().runTask(this, () -> {
             if (!player.isOnline()) { finishCheck(player, false); return; }
-            if (SecurityClientAccess.isBedrock(player)) {
-                openBedrockCaptcha(player, correct);
-                long bedrockTimeout = Math.max(5, getConfig().getLong("captcha.timeout-seconds", 20)) * 20L;
-                Bukkit.getScheduler().runTaskLater(this, () -> {
-                    if (checking.contains(player.getUniqueId())) {
-                        finishCheck(player, false);
-                        if (player.isOnline()) player.kickPlayer(getConfig().getString("messages.timeout", "§cVerification timed out."));
-                    }
-                }, bedrockTimeout);
-                return;
-            }
-            List<String> labels = List.of("Emerald", "Amethyst", "Copper", "Quartz", "Lapis", "Obsidian", "Prismarine", "Redstone", "Diamond");
-            List<ActionButton> choices = new ArrayList<>();
-            List<Integer> order = new ArrayList<>(List.of(0,1,2,3,4,5,6,7,8));
-            Collections.shuffle(order);
-            for (int option : order) {
-                String label = labels.get(option);
-                choices.add(securityButton(label, "Choose " + labels.get(correct) + ".", "/antibot verify " + option,
-                        NamedTextColor.AQUA));
-            }
-            captchaSlots.put(player.getUniqueId(), correct);
-            Dialog dialog = Dialog.create(builder -> builder.empty()
-                    .base(DialogBase.builder(Component.text("Security Verification", NamedTextColor.WHITE))
-                            .externalTitle(Component.text("Verify", NamedTextColor.AQUA))
-                            .canCloseWithEscape(false)
-                            .body(List.of(
-                                    DialogBody.plainMessage(Component.text("Select the item named " + labels.get(correct) + ".", NamedTextColor.WHITE), 320),
-                                    DialogBody.plainMessage(Component.text("You have a limited time and limited attempts.", NamedTextColor.GRAY), 320)))
-                            .build())
-                    .type(DialogType.multiAction(choices).columns(3).build()));
-            player.showDialog(dialog);
-            long timeout = Math.max(5, getConfig().getLong("captcha.timeout-seconds", 20)) * 20L;
+            if (SecurityClientAccess.isBedrock(player)) openBedrockCaptcha(player, correct);
+            else openJavaCaptcha(player, correct);
+
+            long timeout = Math.max(5L, getConfig().getLong("captcha.timeout-seconds", 20L)) * 20L;
             Bukkit.getScheduler().runTaskLater(this, () -> {
-                if (checking.contains(player.getUniqueId())) {
+                if (checking.contains(id)) {
                     finishCheck(player, false);
                     if (player.isOnline()) player.kickPlayer(getConfig().getString("messages.timeout", "§cVerification timed out."));
                 }
             }, timeout);
         });
+    }
+
+    private void openJavaCaptcha(Player player, int correct) {
+        List<String> labels = List.of("Emerald", "Amethyst", "Copper", "Quartz", "Lapis", "Obsidian", "Prismarine", "Redstone", "Diamond");
+        List<ActionButton> choices = new ArrayList<>();
+        List<Integer> order = new ArrayList<>(List.of(0,1,2,3,4,5,6,7,8));
+        Collections.shuffle(order);
+        for (int option : order) {
+            String label = labels.get(option);
+            choices.add(securityButton(label, "Choose " + labels.get(correct) + ".", "/antibot verify " + option,
+                    NamedTextColor.AQUA));
+        }
+        Dialog dialog = Dialog.create(builder -> builder.empty()
+                .base(DialogBase.builder(Component.text("Security Verification", NamedTextColor.WHITE))
+                        .externalTitle(Component.text("Verify", NamedTextColor.AQUA))
+                        .canCloseWithEscape(false)
+                        .body(List.of(
+                                DialogBody.plainMessage(Component.text("Select the item named " + labels.get(correct) + ".", NamedTextColor.WHITE), 320),
+                                DialogBody.plainMessage(Component.text("You have a limited time and limited attempts.", NamedTextColor.GRAY), 320)))
+                        .build())
+                .type(DialogType.multiAction(choices).columns(3).build()));
+        player.showDialog(dialog);
     }
 
     private void openBedrockCaptcha(Player player, int correct) {
@@ -231,18 +226,31 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     }
 
     public void handleVerificationChoice(Player player, int choice) {
-        if (!checking.contains(player.getUniqueId())) return;
-        Integer correct = captchaSlots.get(player.getUniqueId());
-        int attempts = captchaAttempts.merge(player.getUniqueId(), 1, Integer::sum);
-        int maxAttempts = Math.max(1, getConfig().getInt("captcha.max-attempts", 3));
+        UUID id = player.getUniqueId();
+        if (!player.isOnline() || !checking.contains(id)) return;
+        Integer correct = captchaSlots.get(id);
         if (correct == null) return;
-        if (attempts > maxAttempts || choice != correct) {
-            finishCheck(player, false);
-            player.kickPlayer(getConfig().getString("messages.failed", "§cVerification failed."));
+
+        int attempts = captchaAttempts.merge(id, 1, Integer::sum);
+        int maxAttempts = Math.max(1, getConfig().getInt("captcha.max-attempts", 2));
+        if (choice != correct) {
+            if (attempts >= maxAttempts) {
+                recordViolation(id, "captcha-failed").exceptionally(error -> {
+                    getLogger().warning("Could not persist CAPTCHA failure for " + id + ": " + error.getMessage());
+                    return null;
+                });
+                finishCheck(player, false);
+                player.kickPlayer(getConfig().getString("messages.failed", "§cVerification failed."));
+                return;
+            }
+            player.sendMessage(color(getConfig().getString("messages.retry", "&cIncorrect choice. Try again.")));
+            if (SecurityClientAccess.isBedrock(player)) openBedrockCaptcha(player, correct);
+            else openJavaCaptcha(player, correct);
             return;
         }
+
         finishCheck(player, true);
-        player.sendMessage(getConfig().getString("messages.verified", "§aVerification successful."));
+        player.sendMessage(color(getConfig().getString("messages.verified", "&aVerification successful.")));
     }
 
     @EventHandler
@@ -648,6 +656,8 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         UUID id = player.getUniqueId();
         checking.remove(id);
         captchaSlots.remove(id);
+        captchaAttempts.remove(id);
+        captchaStarted.remove(id);
         if (success) {
             verified.add(id);
             storage.put("security", "verified:" + id, Long.toString(System.currentTimeMillis() + Math.max(1L, getConfig().getLong("captcha.verification-hours", 24L)) * 60L * 60L * 1000L)).exceptionally(error -> { getLogger().warning("Could not persist verification for " + id + ": " + error.getMessage()); return null; });
