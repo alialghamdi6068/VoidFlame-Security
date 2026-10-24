@@ -49,6 +49,7 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     private final ConcurrentHashMap<UUID, Integer> captchaSlots = new ConcurrentHashMap<>();
     private final Set<UUID> checking = ConcurrentHashMap.newKeySet();
     private final Set<UUID> verified = ConcurrentHashMap.newKeySet();
+    private final ConcurrentHashMap<UUID, Long> verifiedUntil = new ConcurrentHashMap<>();
     private final Set<UUID> whitelist = ConcurrentHashMap.newKeySet();
     private final Set<UUID> rateLimitBypass = ConcurrentHashMap.newKeySet();
     private final Set<UUID> authenticated = ConcurrentHashMap.newKeySet();
@@ -119,9 +120,22 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
             boolean alreadyVerified = false;
             if (value != null) {
                 try {
-                    alreadyVerified = Long.parseLong(value) > System.currentTimeMillis();
-                    if (alreadyVerified) verified.add(id);
-                } catch (NumberFormatException ignored) {}
+                    long expiry = Long.parseLong(value);
+                    alreadyVerified = expiry > System.currentTimeMillis();
+                    if (alreadyVerified) {
+                        verified.add(id);
+                        verifiedUntil.put(id, expiry);
+                    } else {
+                        verified.remove(id);
+                        verifiedUntil.remove(id);
+                    }
+                } catch (NumberFormatException ignored) {
+                    verified.remove(id);
+                    verifiedUntil.remove(id);
+                }
+            } else {
+                verified.remove(id);
+                verifiedUntil.remove(id);
             }
             if (alreadyVerified || !player.isOnline() || bypassCaptcha(player)) return;
             long window = Math.max(1, getConfig().getLong("antibot.join-window-seconds", 10)) * 1000L;
@@ -348,6 +362,8 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         joinTimes.remove(id);
         riskScores.remove(id);
         blockedUntil.remove(id);
+        verified.remove(id);
+        verifiedUntil.remove(id);
         checking.remove(id);
         captchaSlots.remove(id);
         captchaAttempts.remove(id);
@@ -610,7 +626,18 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         return player != null && ((!SecurityClientAccess.isBedrock(player) && (player.isOp()
                 || player.hasPermission("voidflame.security.bypass")))
                 || whitelisted(player)
-                || verified.contains(id));
+                || isTemporarilyVerified(id));
+    }
+
+    private boolean isTemporarilyVerified(UUID id) {
+        Long expiry = verifiedUntil.get(id);
+        if (expiry == null) return false;
+        if (expiry <= System.currentTimeMillis()) {
+            verifiedUntil.remove(id, expiry);
+            verified.remove(id);
+            return false;
+        }
+        return verified.contains(id);
     }
 
     private boolean whitelisted(Player player) {
@@ -659,8 +686,14 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
         captchaAttempts.remove(id);
         captchaStarted.remove(id);
         if (success) {
+            long expiry = System.currentTimeMillis()
+                    + Math.max(1L, getConfig().getLong("captcha.verification-hours", 24L)) * 60L * 60L * 1000L;
             verified.add(id);
-            storage.put("security", "verified:" + id, Long.toString(System.currentTimeMillis() + Math.max(1L, getConfig().getLong("captcha.verification-hours", 24L)) * 60L * 60L * 1000L)).exceptionally(error -> { getLogger().warning("Could not persist verification for " + id + ": " + error.getMessage()); return null; });
+            verifiedUntil.put(id, expiry);
+            storage.put("security", "verified:" + id, Long.toString(expiry)).exceptionally(error -> {
+                getLogger().warning("Could not persist verification for " + id + ": " + error.getMessage());
+                return null;
+            });
         }
     }
 
