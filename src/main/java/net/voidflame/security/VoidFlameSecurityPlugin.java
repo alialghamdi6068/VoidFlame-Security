@@ -790,8 +790,8 @@ public final class VoidFlameSecurityPlugin extends JavaPlugin implements Listene
     }
 
     private void openSecurityGui(Player viewer) {
-        if (!SecurityClientAccess.isBedrock(viewer) && !viewer.hasPermission("voidflame.security.manage")) {
-            viewer.sendMessage("§cNo permission.");
+        if (SecurityClientAccess.isBedrock(viewer) || !viewer.hasPermission("voidflame.security.manage")) {
+            viewer.sendMessage("§cJava staff only.");
             return;
         }
         List<ActionButton> actions = new ArrayList<>();
